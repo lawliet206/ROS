@@ -20,7 +20,7 @@ PC (ROS Master, 10.222.149.11) ←WiFi→ J1900 (车载) ←USB→ ESP32 (rosser
 | 驱动 | TB6612FNG | 双路 H 桥, 3.3V 逻辑直连 ESP32 |
 | 下位机 | ESP32-WROOM-32 | PCNT 硬件编码器 + PID + MPU6050 IMU |
 | J1900 | Intel Celeron J1900 | x86_64, Ubuntu 20.04, ROS Noetic Base |
-| 轮子 | 85mm 橡胶轮 | 轮距 **135mm** |
+| 轮子 | 85mm 橡胶轮 | 轮距 **180mm** |
 | 电池 | 3S LiPo 11.1V 5200mAh | XT60 接口 |
 | 雷达 | S9-FSRD-V1.0 RX | 115200, AA55, ~69Hz, 39点/帧 |
 
