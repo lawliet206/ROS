@@ -11,7 +11,7 @@
 
   注意事项:
     - 需要激光雷达已连接并驱动正常
-    - serial_bridge 在 J1900 上运行 (或本地调试)
+    - ESP32 通过 rosserial 连接，发布 /odom + /imu
     - 用键盘遥控建图: rosrun teleop_twist_keyboard teleop_twist_keyboard.py
     - 建图时低速慢行 (建议 ~0.3 m/s), 确保激光数据稳定
 -->
@@ -34,7 +34,6 @@
     <arg name="lidar_model"  value="$(arg lidar_model)" />
     <arg name="lidar_port"   value="$(arg lidar_port)" />
     <arg name="start_lidar"  value="$(arg start_lidar)" />
-    <arg name="start_bridge" value="false" />
   </include>
 
   <!-- ============================================================ -->

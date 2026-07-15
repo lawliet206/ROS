@@ -6,8 +6,7 @@
 #   bash slam_start.sh
 #
 # 前提:
-#   1. J1900 上已启动 serial_bridge:
-#      rosrun robot_bringup serial_bridge.py _port:=/dev/ttyUSB0
+#   1. J1900 上 rosserial 已连接 ESP32 (自动连接)
 #   2. 激光雷达已连接 J1900
 #   3. PC 与 J1900 在同一 WiFi 网络下
 #

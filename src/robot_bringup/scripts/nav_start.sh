@@ -10,7 +10,7 @@
 #
 # 前提:
 #   1. 地图已建好 (用 slam_start.sh 建图后 map_saver 保存)
-#   2. J1900 上已启动 serial_bridge
+#   2. J1900 上 rosserial 已连接 ESP32 (自动连接)
 #   3. 激光雷达已连接
 #
 # 启动后发送导航目标:

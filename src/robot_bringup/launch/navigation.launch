@@ -26,13 +26,12 @@
   <arg name="start_lidar"  default="true" />  <!-- 实物部署时设 false -->
 
   <!-- ============================================================ -->
-  <!-- 1. 基础启动 (URDF + 桥接 + 雷达)                              -->
+  <!-- 1. 基础启动 (URDF + 雷达)                                     -->
   <!-- ============================================================ -->
   <include file="$(find robot_bringup)/launch/bringup.launch">
     <arg name="lidar_model"  value="$(arg lidar_model)" />
     <arg name="lidar_port"   value="$(arg lidar_port)" />
     <arg name="start_lidar"  value="$(arg start_lidar)" />
-    <arg name="start_bridge" value="false" />
   </include>
 
   <!-- ============================================================ -->

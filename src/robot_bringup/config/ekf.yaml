@@ -6,7 +6,7 @@ frequency: 30
 silent_tf_failure: false
 two_d_mode: true
 
-# 发布 odom → base_footprint TF (替代 serial_bridge 的 TF)
+# 发布 odom → base_footprint TF (ESP32 的 rosserial 不发布 TF)
 publish_tf: true
 
 odom_frame: odom

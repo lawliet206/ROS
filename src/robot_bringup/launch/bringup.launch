@@ -3,15 +3,12 @@
   ================================
   启动内容:
     1. robot_state_publisher (加载 URDF 模型, 发布 TF)
-    2. serial_bridge (J1900 上运行, 连接 ESP32)
-    3. 激光雷达驱动
+    2. 激光雷达驱动
 
   使用:
     roslaunch robot_bringup bringup.launch
 
-  注意:
-    serial_bridge 默认在本地运行 (用于调试)
-    实际部署时在 J1900 上单独启动 serial_bridge.py
+  ESP32 通过 rosserial 自动连接 (不需在此启动串口节点)
 -->
 <launch>
 
@@ -21,19 +18,12 @@
   <arg name="gear_ratio"  default="10.0" />    <!-- 减速比 1:10 -->
   <arg name="enc_ppr"     default="11.0" />    <!-- 编码器 PPR -->
 
-  <!-- J1900 串口 -->
-  <arg name="serial_port" default="/dev/ttyUSB0" />
-  <arg name="serial_baud" default="115200" />
-
   <!-- 激光雷达型号: s9_fsrd / ydlidar_x4 / ydlidar_f2 / rplidar_a1 / rplidar_a2 -->
   <arg name="lidar_model" default="s9_fsrd" />
   <arg name="lidar_port"  default="/dev/ttyUSB1" />
 
   <!-- 是否启动激光雷达驱动 (没雷达时关掉) -->
   <arg name="start_lidar" default="true" />
-
-  <!-- 是否启动串口桥接 (J1900 上单独启动时, PC 端设为 false) -->
-  <arg name="start_bridge" default="true" />
 
   <!-- ============================================================ -->
   <!-- 1. Robot State Publisher (URDF → TF 静态变换)                -->
@@ -46,25 +36,7 @@
   </node>
 
   <!-- ============================================================ -->
-  <!-- 2. 串口桥接 (serial_bridge) — 在 J1900 上运行                   -->
-  <!-- ============================================================ -->
-  <!--
-    实物部署时 serial_bridge 在 J1900 上单独启动:
-      rosrun robot_bringup serial_bridge.py _port:=/dev/ttyUSB0
-    PC 端启动 launch 时设 start_bridge:=false
-  -->
-  <node if="$(arg start_bridge)" name="serial_bridge"
-        pkg="robot_bringup" type="serial_bridge.py" output="screen">
-    <param name="port"       value="$(arg serial_port)" />
-    <param name="baud"       value="$(arg serial_baud)" />
-    <param name="wheel_dia"  value="$(arg wheel_dia)" />
-    <param name="wheel_base" value="$(arg wheel_base)" />
-    <param name="gear_ratio" value="$(arg gear_ratio)" />
-    <param name="enc_ppr"    value="$(arg enc_ppr)" />
-  </node>
-
-  <!-- ============================================================ -->
-  <!-- 3. 激光雷达驱动                                                  -->
+  <!-- 2. 激光雷达驱动                                                  -->
   <!-- ============================================================ -->
   <!--
     YDLIDAR X4 驱动安装:

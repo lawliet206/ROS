@@ -46,7 +46,7 @@ ROS/
 ├── src/
 │   ├── robot_bringup/          # 实物包 (J1900 需要这个)
 │   │   ├── launch/             # bringup/slam/navigation/ekf/follow
-│   │   ├── scripts/            # serial_bridge(旧)/s9_lidar_driver/laser_follower/send_goals
+│   │   ├── scripts/            # s9_lidar_driver/laser_follower/send_goals
 │   │   ├── urdf/robot.urdf    # 实物 URDF (轮距 0.180)
 │   │   └── config/ekf.yaml
 │   └── robot_sim/              # 仿真包 (仅 PC 用)
@@ -102,8 +102,8 @@ roslaunch robot_bringup slam.launch start_lidar:=false
 - ✅ 实物轮距已确认为 180mm
 
 ### 注意事项
-- `serial_bridge.py` 已被 rosserial 取代，不再使用
-- `wheel_controller.py` 是死代码（仿真用 Gazebo diff_drive 插件）
+  - ~~`serial_bridge.py`~~ 已被 rosserial 取代，已删除
+  - ~~`wheel_controller.py`~~ 仿真用 Gazebo diff_drive 插件，已删除
 - `s9_lidar_driver.py` 当前发布完整 360° 扫描，不是 1.4° 切片
 - 仿真导航用 `sim_navigation.launch`，实物用 `navigation.launch`
 
