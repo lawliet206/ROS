@@ -47,7 +47,7 @@ ROS/
 │   ├── robot_bringup/          # 实物包 (J1900 需要这个)
 │   │   ├── launch/             # bringup/slam/navigation/ekf/follow
 │   │   ├── scripts/            # serial_bridge(旧)/s9_lidar_driver/laser_follower/send_goals
-│   │   ├── urdf/robot.urdf    # 实物 URDF (轮距 0.135)
+│   │   ├── urdf/robot.urdf    # 实物 URDF (轮距 0.180)
 │   │   └── config/ekf.yaml
 │   └── robot_sim/              # 仿真包 (仅 PC 用)
 │       ├── launch/             # simulation/sim_slam/sim_navigation
@@ -87,7 +87,7 @@ roslaunch robot_bringup slam.launch start_lidar:=false
 ## 🐛 当前状态 (2026-07-14)
 
 ### 已解决
-- ✅ 轮距统一为 0.135m（URDF/launch/固件/仿真全部对齐）
+- ✅ 轮距统一为 180mm（URDF/launch/固件/仿真全部对齐）
 - ✅ ESP32 固件从软件中断升级为 PCNT 硬件编码器（不漏脉冲）
 - ✅ 通信从 serial_bridge 改为 rosserial（省一个节点）
 - ✅ 电机驱动从 BTS7960 → TB6612FNG（更便宜，3.3V 直连）
@@ -99,7 +99,7 @@ roslaunch robot_bringup slam.launch start_lidar:=false
 - ❌ 导航路径有时绕远路（navfn 全局规划问题）
 - ❌ 到达目标前速度不稳定（TEB 优化收敛问题）
 - ❌ 仿真地图有轻微鬼影障碍物（gmapping 参数 minimumScore=300）
-- ❌ 实物轮距 135mm 需用户确认
+- ✅ 实物轮距已确认为 180mm
 
 ### 注意事项
 - `serial_bridge.py` 已被 rosserial 取代，不再使用
@@ -586,6 +586,85 @@ Skills 是带领域指令的封装模块，**在对话中命中关键词时自�
 | `/cancel-ralph` | OpenCode | 取消 Ralph Loop |
 | `/hyperplan` | OpenCode | 对抗性多 Agent 规划 |
 | `ultrawork` / `ulw` | oh-my-openagent | **一键激活**所有 Agent 并行工作 |
+
+---
+
+## Git 版本控制
+
+本项目使用 Git 进行版本控制，初始提交 `21969ee` 包含 46 个文件（6760 行）。
+
+### 常用命令速查
+
+| 命令 | 作用 | 用法示例 |
+|------|------|---------|
+| `git log` | 查看提交历史 | `git log --oneline -10`（最近 10 条） |
+| `git log --oneline --graph` | 图形化查看分支历史 | `git log --oneline --graph --all` |
+| `git status` | 查看当前工作区状态（改了哪些文件） | `git status` |
+| `git diff` | 查看工作区与上次提交的差异 | `git diff` |
+| `git diff --stat` | 只显示改了哪些文件，不显示具体内容 | `git diff --stat HEAD~1` |
+| `git show` | 查看某次提交的详情 | `git show 21969ee` |
+| `git blame <文件>` | 查看文件每行是谁最后改的、什么时候 | `git blame src/.../laser_follower.py` |
+| `git add <文件>` | 暂存文件（准备提交） | `git add src/.../serial_bridge.py` |
+| `git add .` | 暂存所有变更 | `git add .` |
+| `git commit -m "消息"` | 提交暂存的文件 | `git commit -m "fix: 统一轮距为 0.180m"` |
+| `git commit -am "消息"` | 暂存所有已跟踪文件 + 提交（一步到位） | `git commit -am "refactor: 删除 wheel_controller.py"` |
+| `git checkout -- <文件>` | **丢弃某个文件的未提交改动**（后悔药） | `git checkout -- esp32_firmware/esp32_firmware.ino` |
+| `git checkout .` | **丢弃所有未提交改动** | `git checkout .` |
+| `git revert <提交ID>` | **撤销某次提交**（安全，不会丢历史） | `git revert 21969ee` |
+| `git branch` | 列出本地分支 | `git branch -a`（含远程） |
+| `git checkout -b <分支名>` | 创建并切换到新分支 | `git checkout -b fix-wheel-base` |
+| `git checkout <分支名>` | 切换分支 | `git checkout master` |
+| `git merge <分支名>` | 合并分支到当前分支 | `git merge fix-wheel-base` |
+| `git stash` | 临时保存当前工作（切分支前用） | `git stash && git checkout master` |
+| `git stash pop` | 恢复临时保存的工作 | `git stash pop` |
+| `git tag <标签名>` | 打标签（里程碑） | `git tag v1.0-slam-works` |
+| `git clean -fd` | 删除未跟踪的文件和目录 | `git clean -fd`（⚠️ 慎用，会删 .gitignore 外的文件） |
+
+### 实际场景速查
+
+**场景 1：改坏了想还原**
+```bash
+# 还没提交：
+git checkout .                    # 所有文件还原到上次提交状态
+git checkout -- src/.../file.py   # 只还原某个文件
+
+# 已经提交了：
+git revert HEAD                   # 撤销最新一次提交（安全）
+git revert <commit-id>            # 撤销某次特定提交
+```
+
+**场景 2：想试试一个改动，又怕影响主线**
+```bash
+git checkout -b test-new-pid      # 开个新分支
+# ... 改 PID 参数、跑一圈 ...
+git commit -am "test: 尝试新的 PID 参数"
+git checkout master                # 回到主线
+git branch -D test-new-pid        # 不满意，删掉分支
+```
+
+**场景 3：查一段代码是谁写的**
+```bash
+git blame src/robot_bringup/scripts/s9_lidar_driver.py
+# 输出：每行前面有 commit ID + 作者 + 日期
+```
+
+**场景 4：比较当前和一周前的区别**
+```bash
+git log --oneline --since="7 days ago"   # 看一周内的改动
+git diff HEAD~5                           # 跟 5 次提交前比
+```
+
+### .gitignore 内容
+
+```
+build/
+devel/
+install/
+*.pyc / __pycache__/
+.vscode/ / .idea/
+.claude/ / .claud/ / .omo/ / .waylog/
+YDLIDAR/   # 第三方 vendored SDK，自带 git
+```
 
 ---
 

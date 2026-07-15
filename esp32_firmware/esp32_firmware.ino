@@ -2,6 +2,7 @@
 #include <math.h>
 #include "driver/pcnt.h" 
 #include "esp_timer.h" 
+#include "esp_task_wdt.h"
 #include <ros.h>
 #include <geometry_msgs/Twist.h>
 #include <nav_msgs/Odometry.h>
@@ -306,6 +307,10 @@ void setup() {
   pid_left  = {1.5f, 0.3f, 0.05f, 0, 0, false};
   pid_right = {1.5f, 0.3f, 0.05f, 0, 0, false}; 
   
+  // 硬件看门狗：主循环卡死 5 秒后自动重启 ESP32
+  esp_task_wdt_init(5, true);
+  esp_task_wdt_add(NULL);
+
   nh.initNode();
   nh.advertise(pub_odom);
   nh.advertise(pub_imu);
@@ -316,6 +321,8 @@ void setup() {
 }
 
 void loop() {
+  esp_task_wdt_reset();  // 喂硬件看门狗
+
   int64_t now = esp_timer_get_time();
   if (now - last_loop_us < LOOP_INTERVAL_US) {
     nh.spinOnce(); 
