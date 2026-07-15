@@ -84,6 +84,16 @@ rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1
 roslaunch robot_bringup slam.launch start_lidar:=false
 ```
 
+### EKF 传感器融合（可选，提升定位精度）
+
+```bash
+# 安装（只需一次）
+sudo apt install ros-noetic-robot-localization
+
+# 启动 EKF 融合（替代纯编码器里程计）
+roslaunch robot_bringup ekf.launch
+```
+
 ## 🐛 当前状态 (2026-07-14)
 
 ### 已解决

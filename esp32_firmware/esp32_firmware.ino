@@ -108,6 +108,19 @@ bool stall_fault_r = false;
 float imu_ax = 0, imu_ay = 0, imu_az = 0;
 float imu_gx = 0, imu_gy = 0, imu_gz = 0;
 bool  imu_data_valid = false; 
+
+// IMU 低通滤波状态
+#define IMU_LP_ALPHA  0.15f        // 滤波系数 (越小越平滑)
+float imu_ax_f = 0, imu_ay_f = 0, imu_az_f = 0;
+float imu_gx_f = 0, imu_gy_f = 0, imu_gz_f = 0;
+
+// 陀螺仪零偏（启动时校准）
+#define IMU_CALIB_SAMPLES  200
+float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
+bool  imu_calibrated = false;
+
+// 互补滤波姿态估计
+float roll_est = 0, pitch_est = 0;
 uint8_t imu_timeout_count = 0; 
 
 // ============================================================
@@ -241,6 +254,28 @@ void setup_imu() {
   Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1B); Wire.write(0x08); Wire.endTransmission();
   Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1C); Wire.write(0x08); Wire.endTransmission();
 }
+void calibrate_gyro() {
+  // 陀螺仪零偏校准：静止时采样 200 次取平均
+  float sx = 0, sy = 0, sz = 0;
+  for (int i = 0; i < IMU_CALIB_SAMPLES; i++) {
+    Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x3B); Wire.endTransmission(false);
+    if (Wire.requestFrom((uint8_t)MPU6050_ADDR, (uint8_t)14) < 14) { i--; delay(5); continue; }
+    Wire.read(); Wire.read(); Wire.read(); Wire.read(); Wire.read(); Wire.read(); // 跳过加速度
+    Wire.read(); Wire.read(); // 跳过温度
+    int16_t gx = (Wire.read() << 8) | Wire.read();
+    int16_t gy = (Wire.read() << 8) | Wire.read();
+    int16_t gz = (Wire.read() << 8) | Wire.read();
+    sx += gx / 65.5f * (M_PI / 180.0f);
+    sy += gy / 65.5f * (M_PI / 180.0f);
+    sz += gz / 65.5f * (M_PI / 180.0f);
+    delay(5);
+  }
+  gyro_bias_x = sx / IMU_CALIB_SAMPLES;
+  gyro_bias_y = sy / IMU_CALIB_SAMPLES;
+  gyro_bias_z = sz / IMU_CALIB_SAMPLES;
+  imu_calibrated = true;
+}
+
 void read_imu() {
   Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x3B); Wire.endTransmission(false);
   Wire.setTimeOut(2000); 
@@ -258,8 +293,28 @@ void read_imu() {
   int16_t gx_raw = (Wire.read() << 8) | Wire.read();
   int16_t gy_raw = (Wire.read() << 8) | Wire.read();
   int16_t gz_raw = (Wire.read() << 8) | Wire.read();
-  imu_ax = ax_raw / 8192.0f * 9.81f; imu_ay = ay_raw / 8192.0f * 9.81f; imu_az = az_raw / 8192.0f * 9.81f;
-  imu_gx = gx_raw / 65.5f * (M_PI / 180.0f); imu_gy = gy_raw / 65.5f * (M_PI / 180.0f); imu_gz = gz_raw / 65.5f * (M_PI / 180.0f);
+  float rax = ax_raw / 8192.0f * 9.81f, ray = ay_raw / 8192.0f * 9.81f, raz = az_raw / 8192.0f * 9.81f;
+  float rgx = gx_raw / 65.5f * (M_PI / 180.0f), rgy = gy_raw / 65.5f * (M_PI / 180.0f), rgz = gz_raw / 65.5f * (M_PI / 180.0f);
+
+  // 低通 IIR 滤波 + 陀螺仪零偏补偿
+  if (!imu_calibrated) {
+    imu_ax_f = rax; imu_ay_f = ray; imu_az_f = raz;
+    imu_gx_f = rgx; imu_gy_f = rgy; imu_gz_f = rgz;
+  } else {
+    imu_ax_f = IMU_LP_ALPHA * rax + (1.0f - IMU_LP_ALPHA) * imu_ax_f;
+    imu_ay_f = IMU_LP_ALPHA * ray + (1.0f - IMU_LP_ALPHA) * imu_ay_f;
+    imu_az_f = IMU_LP_ALPHA * raz + (1.0f - IMU_LP_ALPHA) * imu_az_f;
+    imu_gx_f = IMU_LP_ALPHA * (rgx - gyro_bias_x) + (1.0f - IMU_LP_ALPHA) * imu_gx_f;
+    imu_gy_f = IMU_LP_ALPHA * (rgy - gyro_bias_y) + (1.0f - IMU_LP_ALPHA) * imu_gy_f;
+    imu_gz_f = IMU_LP_ALPHA * (rgz - gyro_bias_z) + (1.0f - IMU_LP_ALPHA) * imu_gz_f;
+  }
+
+  // 从加速度计估计 roll/pitch（静止平放时稳定）
+  roll_est = atan2(-imu_ay_f, -imu_az_f);
+  pitch_est = atan2(imu_ax_f, sqrt(imu_ay_f * imu_ay_f + imu_az_f * imu_az_f));
+
+  imu_ax = imu_ax_f; imu_ay = imu_ay_f; imu_az = imu_az_f;
+  imu_gx = imu_gx_f; imu_gy = imu_gy_f; imu_gz = imu_gz_f;
   imu_data_valid = true; 
 }
 
@@ -303,6 +358,7 @@ void setup() {
   setup_motors();
   Wire.begin(I2C_SDA, I2C_SCL, 400000);
   setup_imu();
+  calibrate_gyro();  // 静止 1 秒标定陀螺零偏
   
   pid_left  = {1.5f, 0.3f, 0.05f, 0, 0, false};
   pid_right = {1.5f, 0.3f, 0.05f, 0, 0, false}; 
@@ -436,28 +492,43 @@ void loop() {
   odom_msg.twist.covariance[0] = 0.001;
   odom_msg.twist.covariance[35] = 0.001;
 
-  // 🟡 优化：修正IMU协方差矩阵（仅对角线设方差，非对角线清零）
   if (imu_data_valid) {
     imu_msg.header.stamp = nh.now();
     imu_msg.header.frame_id = "imu_link";
-    imu_msg.linear_acceleration.x = imu_ax;
-    imu_msg.linear_acceleration.y = imu_ay;
-    imu_msg.linear_acceleration.z = imu_az;
-    imu_msg.angular_velocity.x = imu_gx;
-    imu_msg.angular_velocity.y = imu_gy;
-    imu_msg.angular_velocity.z = imu_gz;
-    // 加速度协方差：仅对角线设0.01，非对角线清零
+
+    // 使用低通滤波 + 零偏补偿后的值
+    imu_msg.linear_acceleration.x = imu_ax_f;
+    imu_msg.linear_acceleration.y = imu_ay_f;
+    imu_msg.linear_acceleration.z = imu_az_f;
+    imu_msg.angular_velocity.x = imu_gx_f;
+    imu_msg.angular_velocity.y = imu_gy_f;
+    imu_msg.angular_velocity.z = imu_gz_f;
+
+    // 从加速度计估计的姿态（静止平放时稳定，运动时会跟随但不精确）
+    float cp = cos(pitch_est * 0.5f), sp = sin(pitch_est * 0.5f);
+    float cr = cos(roll_est  * 0.5f), sr = sin(roll_est  * 0.5f);
+    imu_msg.orientation.x = sr * cp;
+    imu_msg.orientation.y = sp * cr;
+    imu_msg.orientation.z = 0;
+    imu_msg.orientation.w = cr * cp;
+
+    // 加速度协方差（滤波后更小）
     for (int i = 0; i < 9; i++) imu_msg.linear_acceleration_covariance[i] = 0.0;
-    imu_msg.linear_acceleration_covariance[0] = 0.01; // x方差
-    imu_msg.linear_acceleration_covariance[4] = 0.01; // y方差
-    imu_msg.linear_acceleration_covariance[8] = 0.01; // z方差
-    // 角速度协方差：仅对角线设0.01，非对角线清零
+    imu_msg.linear_acceleration_covariance[0] = 0.005;
+    imu_msg.linear_acceleration_covariance[4] = 0.005;
+    imu_msg.linear_acceleration_covariance[8] = 0.005;
+
+    // 角速度协方差（滤波后更小）
     for (int i = 0; i < 9; i++) imu_msg.angular_velocity_covariance[i] = 0.0;
-    imu_msg.angular_velocity_covariance[0] = 0.01; // x方差
-    imu_msg.angular_velocity_covariance[4] = 0.01; // y方差
-    imu_msg.angular_velocity_covariance[8] = 0.01; // z方差
-    // 姿态协方差设为-1（表示不提供姿态）
-    for(int i=0; i<9; i++) imu_msg.orientation_covariance[i] = -1.0; 
+    imu_msg.angular_velocity_covariance[0] = 0.005;
+    imu_msg.angular_velocity_covariance[4] = 0.005;
+    imu_msg.angular_velocity_covariance[8] = 0.005;
+
+    // 姿态协方差（提供 roll/pitch，yaw 不可观测）
+    for (int i = 0; i < 9; i++) imu_msg.orientation_covariance[i] = 0.0;
+    imu_msg.orientation_covariance[0] = 0.005;  // roll 方差
+    imu_msg.orientation_covariance[4] = 0.005;  // pitch 方差
+    imu_msg.orientation_covariance[8] = -1.0;    // yaw 不提供
   }
 
   if (loop_count % 2 == 0) {
