@@ -1,0 +1,49 @@
+<!--
+  ekf.launch — EKF 传感器融合 (一键启动)
+  ========================================
+  功能: 用 robot_localization EKF 融合编码器里程计和 IMU，
+        发布更准确的 /odometry/filtered 和 odom→base_footprint TF。
+
+  使用:
+    roslaunch robot_bringup ekf.launch
+
+  依赖:
+    - serial_bridge 已启动 (发布 /odom + /imu)
+    - robot_state_publisher 已启动 (URDF → TF)
+
+  安装:
+    sudo apt install ros-noetic-robot-localization
+-->
+
+<launch>
+
+  <!-- ===== 参数 ===== -->
+  <arg name="lidar_model" default="s9_fsrd" />
+  <arg name="lidar_port"  default="/dev/ttyUSB1" />
+  <arg name="start_lidar" default="true" />  <!-- 实物部署时设 false -->
+
+  <!-- ============================================================ -->
+  <!-- 1. 基础启动 (URDF + 雷达, 不启动 serial_bridge)                -->
+  <!-- ============================================================ -->
+  <include file="$(find robot_bringup)/launch/bringup.launch">
+    <arg name="lidar_model"  value="$(arg lidar_model)" />
+    <arg name="lidar_port"   value="$(arg lidar_port)" />
+    <arg name="start_lidar"  value="$(arg start_lidar)" />
+    <arg name="start_bridge" value="false" />
+  </include>
+
+  <!-- ============================================================ -->
+  <!-- 2. EKF 融合节点                                                 -->
+  <!-- ============================================================ -->
+  <!--
+    serial_bridge 仍然发布原始 /odom (作为 EKF 输入),
+    但 TF 发布由 EKF 接管 (serial_bridge 需设 publish_tf:=false)。
+    实物部署时在 J1900 上启动:
+      rosrun robot_bringup serial_bridge.py _port:=/dev/ttyUSB0 _publish_tf:=false
+  -->
+  <node name="ekf_localization" pkg="robot_localization"
+        type="ekf_localization_node" output="screen">
+    <rosparam file="$(find robot_bringup)/config/ekf.yaml" />
+  </node>
+
+</launch>

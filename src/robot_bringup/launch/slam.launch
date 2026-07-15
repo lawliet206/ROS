@@ -1,0 +1,99 @@
+<!--
+  slam.launch — SLAM 建图 (一键启动)
+  ====================================
+  功能: gmapping 激光 SLAM 建图
+
+  使用:
+    roslaunch robot_bringup slam.launch
+
+  建图完成后保存地图:
+    rosrun map_server map_saver -f ~/maps/my_map
+
+  注意事项:
+    - 需要激光雷达已连接并驱动正常
+    - serial_bridge 在 J1900 上运行 (或本地调试)
+    - 用键盘遥控建图: rosrun teleop_twist_keyboard teleop_twist_keyboard.py
+    - 建图时低速慢行 (建议 ~0.3 m/s), 确保激光数据稳定
+-->
+
+<launch>
+
+  <!-- ===== 激光雷达参数 ===== -->
+  <arg name="lidar_model" default="s9_fsrd" />
+  <arg name="lidar_port"  default="/dev/ttyUSB1" />
+  <arg name="start_lidar" default="true" />  <!-- 实物部署时设 false, 雷达在 J1900 上启动 -->
+
+  <!-- ===== gmapping 参数 ===== -->
+  <arg name="map_size"        default="2048" />    <!-- 地图尺寸 (格数) -->
+  <arg name="map_resolution"  default="0.05" />    <!-- 分辨率 (m/格) -->
+
+  <!-- ============================================================ -->
+  <!-- 1. 基础启动 (URDF + 桥接 + 雷达)                              -->
+  <!-- ============================================================ -->
+  <include file="$(find robot_bringup)/launch/bringup.launch">
+    <arg name="lidar_model"  value="$(arg lidar_model)" />
+    <arg name="lidar_port"   value="$(arg lidar_port)" />
+    <arg name="start_lidar"  value="$(arg start_lidar)" />
+    <arg name="start_bridge" value="false" />
+  </include>
+
+  <!-- ============================================================ -->
+  <!-- 2. gmapping SLAM                                              -->
+  <!-- ============================================================ -->
+  <!--
+    gmapping 以激光+里程计为输入, 实时估计机器人位姿并构建占据栅格地图.
+    参数说明:
+      - particles: 粒子数 (30足够, 多了浪费算力)
+      - map_update_interval: 地图更新间隔 (秒)
+      - linearUpdate: 平移超过此距离才更新粒子 (m)
+      - angularUpdate: 旋转超过此角度才更新粒子 (rad)
+      - minimumScore: 匹配分数阈值, 低于此值认为定位丢失
+  -->
+
+  <node name="slam_gmapping" pkg="gmapping" type="slam_gmapping" output="screen">
+    <!-- 帧设置 -->
+    <param name="base_frame"        value="base_footprint" />
+    <param name="odom_frame"        value="odom" />
+    <param name="map_frame"         value="map" />
+
+    <!-- 地图 -->
+    <param name="xmin"              value="-15" />
+    <param name="ymin"              value="-15" />
+    <param name="xmax"              value="15" />
+    <param name="ymax"              value="15" />
+    <param name="delta"             value="$(arg map_resolution)" />
+
+    <!-- 激光模型 -->
+    <param name="maxUrange"         value="8.0" />    <!-- 最大可用测距 -->
+    <param name="maxRange"          value="10.0" />   <!-- 激光最大量程 -->
+    <param name="sigma"             value="0.05" />
+    <param name="kernelSize"        value="1" />
+    <param name="lstep"             value="0.05" />
+    <param name="astep"             value="0.05" />
+    <param name="iterations"        value="5" />
+    <param name="lsigma"            value="0.075" />
+    <param name="ogain"             value="3.0" />
+    <param name="lskip"             value="0" />
+    <param name="minimumScore"      value="50" />
+    <param name="srr"               value="0.1" />    <!-- 里程计平移噪声 -->
+    <param name="srt"               value="0.2" />    <!-- 里程计旋转噪声 -->
+    <param name="str"               value="0.1" />
+    <param name="stt"               value="0.2" />
+
+    <!-- 粒子滤波 -->
+    <param name="particles"         value="30" />
+    <param name="linearUpdate"      value="0.5" />
+    <param name="angularUpdate"     value="0.2" />
+    <param name="temporalUpdate"    value="-1.0" />
+    <param name="resampleThreshold" value="0.5" />
+
+    <!-- 变换发布延迟 -->
+    <param name="transform_publish_period" value="0.05" />
+  </node>
+
+  <rosparam>
+    <!-- 是否发布 map→odom 的 TF (通常让 AMCL 发布) -->
+    /slam_gmapping/tf_delay: 0.05
+  </rosparam>
+
+</launch>

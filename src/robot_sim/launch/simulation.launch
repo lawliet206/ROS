@@ -1,0 +1,67 @@
+<!--
+  simulation.launch — Gazebo 仿真启动
+  =====================================
+  启动: Gazebo + 机器人模型 + robot_state_publisher
+
+  使用:
+    roslaunch robot_sim simulation.launch
+
+  然后键盘遥控:
+    rosrun teleop_twist_keyboard teleop_twist_keyboard.py
+-->
+<launch>
+
+  <!-- ===== 参数 ===== -->
+  <arg name="world_file"  default="$(find robot_sim)/worlds/room.world"/>
+  <arg name="gui"         default="true"/>
+  <arg name="paused"      default="false"/>
+  <arg name="use_sim_time" default="true"/>
+
+  <!-- 机器人初始位姿 -->
+  <arg name="start_x" default="0.0"/>
+  <arg name="start_y" default="0.0"/>
+  <arg name="start_yaw" default="0.0"/>
+
+  <!-- ============================================================ -->
+  <!-- 1. 启用仿真时间                                                   -->
+  <!-- ============================================================ -->
+  <param name="/use_sim_time" value="$(arg use_sim_time)"/>
+
+  <!-- ============================================================ -->
+  <!-- 2. 启动 Gazebo                                                  -->
+  <!-- ============================================================ -->
+  <include file="$(find gazebo_ros)/launch/empty_world.launch">
+    <arg name="world_name" value="$(arg world_file)"/>
+    <arg name="gui"        value="$(arg gui)"/>
+    <arg name="paused"     value="$(arg paused)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="physics"    value="ode"/>
+  </include>
+
+  <!-- ============================================================ -->
+  <!-- 3. 加载机器人描述                                                -->
+  <!-- ============================================================ -->
+  <param name="robot_description"
+         textfile="$(find robot_sim)/urdf/robot_sim.urdf"/>
+
+  <!-- ============================================================ -->
+  <!-- 4. 启动 robot_state_publisher (TF 广播)                         -->
+  <!-- ============================================================ -->
+  <node name="robot_state_publisher" pkg="robot_state_publisher"
+        type="robot_state_publisher">
+    <param name="publish_frequency" value="50.0"/>
+  </node>
+
+  <!-- ============================================================ -->
+  <!-- 5. 在 Gazebo 中生成机器人                                         -->
+  <!-- ============================================================ -->
+  <node name="spawn_robot" pkg="gazebo_ros" type="spawn_model"
+        args="-param robot_description
+              -urdf
+              -model diff_drive_robot
+              -x $(arg start_x)
+              -y $(arg start_y)
+              -Y $(arg start_yaw)"
+        output="screen"/>
+
+</launch>

@@ -1,0 +1,49 @@
+<!--
+  follow.launch — 人体跟随 (一键启动)
+  =====================================
+  功能: 纯激光雷达人体跟随
+
+  使用:
+    roslaunch robot_bringup follow.launch
+
+  跟随节点直接发布 /cmd_vel 控制底盘.
+  如需多源切换, 可安装 cmd_vel_mux.
+-->
+
+<launch>
+
+  <!-- ===== 参数 ===== -->
+  <arg name="lidar_model" default="s9_fsrd" />
+  <arg name="lidar_port"  default="/dev/ttyUSB1" />
+  <arg name="start_lidar" default="true" />  <!-- 实物部署时设 false -->
+  <arg name="follow_dist" default="1.0" />     <!-- 跟随距离 (m) -->
+  <arg name="max_speed"   default="0.5" />     <!-- 最大速度 (m/s) -->
+
+  <!-- ============================================================ -->
+  <!-- 1. 基础启动 (URDF + 桥接 + 雷达)                              -->
+  <!-- ============================================================ -->
+  <include file="$(find robot_bringup)/launch/bringup.launch">
+    <arg name="lidar_model"  value="$(arg lidar_model)" />
+    <arg name="lidar_port"   value="$(arg lidar_port)" />
+    <arg name="start_lidar"  value="$(arg start_lidar)" />
+    <arg name="start_bridge" value="false" />
+  </include>
+
+  <!-- ============================================================ -->
+  <!-- 2. 激光跟随节点                                                 -->
+  <!-- ============================================================ -->
+  <node name="laser_follower" pkg="robot_bringup" type="laser_follower.py"
+        output="screen">
+    <param name="target_dist"  value="$(arg follow_dist)" />
+    <param name="max_linear"   value="$(arg max_speed)" />
+    <param name="max_angular"  value="0.8" />
+    <param name="scan_topic"   value="/scan" />
+  </node>
+
+  <!--
+    跟随节点直接发布 /cmd_vel (无需 relay)
+    如需在遥控/跟随/导航之间切换, 安装 cmd_vel_mux:
+      sudo apt install ros-noetic-cmd-vel-mux
+  -->
+
+</launch>

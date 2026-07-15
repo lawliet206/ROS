@@ -1,0 +1,78 @@
+<!--
+  sim_slam.launch — 仿真 SLAM 建图 (高精度模式)
+  ==============================================
+  功能: Gazebo 仿真 + gmapping 激光 SLAM 建图
+
+  使用:
+    roslaunch robot_sim sim_slam.launch
+
+  操作:
+    1. 启动后打开第二个终端
+    2. rosrun teleop_twist_keyboard teleop_twist_keyboard.py
+    3. 遥控小车在场地上绕圈建图 (建议 0.2~0.3 m/s 慢速)
+    4. 开 rviz (添加 Map + LaserScan)
+    5. 建图完成后:
+       rosrun map_server map_saver -f ~/maps/sim_map
+
+  建好的地图可直接用于实物导航 (拷到 PC 上即可).
+  实物导航时用: roslaunch robot_bringup navigation.launch map_file:=~/maps/sim_map.yaml
+-->
+<launch>
+
+  <arg name="world_file" default="$(find robot_sim)/worlds/room.world"/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="gui"          default="true"/>
+  <arg name="paused"       default="false"/>
+
+  <!-- ============================================================ -->
+  <!-- 1. 仿真 (Gazebo + 机器人)                                       -->
+  <!-- ============================================================ -->
+  <include file="$(find robot_sim)/launch/simulation.launch">
+    <arg name="world_file"   value="$(arg world_file)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="gui"          value="$(arg gui)"/>
+    <arg name="paused"       value="$(arg paused)"/>
+  </include>
+
+  <!-- ============================================================ -->
+  <!-- 2. gmapping SLAM (高精度参数)                                   -->
+  <!-- ============================================================ -->
+  <node name="slam_gmapping" pkg="gmapping" type="slam_gmapping" output="screen">
+
+    <param name="base_frame"  value="base_footprint"/>
+    <param name="odom_frame"  value="odom"/>
+    <param name="map_frame"   value="map"/>
+
+    <!-- 地图: 15m 范围, 5cm 分辨率 (与实物一致) -->
+    <param name="xmin" value="-10"/>  <param name="ymin" value="-10"/>
+    <param name="xmax" value="10"/>   <param name="ymax" value="10"/>
+    <param name="delta" value="0.05"/>
+
+    <!-- === 激光模型 (只接受高质量匹配) === -->
+    <param name="maxUrange"      value="8.0"/>
+    <param name="maxRange"       value="10.0"/>
+    <param name="sigma"          value="0.05"/>
+    <param name="kernelSize"     value="3"/>       <!-- 平滑, 消除噪点 -->
+    <param name="lstep"          value="0.05"/>
+    <param name="astep"          value="0.05"/>
+    <param name="iterations"     value="10"/>      <!-- 更多迭代, 匹配更准 -->
+    <param name="lsigma"         value="0.075"/>
+    <param name="ogain"          value="3.0"/>
+    <param name="lskip"          value="0"/>
+    <param name="minimumScore"   value="300"/>     <!-- 高门槛, 杜绝鬼影 -->
+
+    <!-- === 里程计模型 (仿真里程计非常准) === -->
+    <param name="srr" value="0.001"/>
+    <param name="srt" value="0.001"/>
+    <param name="str" value="0.001"/>
+    <param name="stt" value="0.001"/>
+
+    <!-- === 粒子滤波: 多粒子+高更新频率 === -->
+    <param name="particles"             value="200"/>
+    <param name="linearUpdate"          value="0.2"/>   <!-- 每移动 0.2m 更新地图 -->
+    <param name="angularUpdate"         value="0.1"/>   <!-- 每转 0.1rad(~6°) 更新 -->
+    <param name="resampleThreshold"     value="0.5"/>
+    <param name="transform_publish_period" value="0.05"/>
+  </node>
+
+</launch>

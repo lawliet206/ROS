@@ -1,0 +1,130 @@
+<!--
+  sim_navigation.launch — 仿真多点导航 (TEB)
+  使用: roslaunch robot_sim sim_navigation.launch map_file:=~/maps/sim_map.yaml
+-->
+<launch>
+  <arg name="world_file"  default="$(find robot_sim)/worlds/room.world"/>
+  <arg name="map_file"    default=""/>
+  <arg name="use_sim_time" default="true"/>
+  <arg name="gui"          default="true"/>
+  <arg name="paused"       default="false"/>
+
+  <include file="$(find robot_sim)/launch/simulation.launch">
+    <arg name="world_file"   value="$(arg world_file)"/>
+    <arg name="use_sim_time" value="$(arg use_sim_time)"/>
+    <arg name="gui"          value="$(arg gui)"/>
+    <arg name="paused"       value="$(arg paused)"/>
+  </include>
+
+  <node name="map_server" pkg="map_server" type="map_server"
+        args="$(arg map_file)" output="screen">
+    <param name="frame_id" value="map"/>
+  </node>
+
+  <node name="amcl" pkg="amcl" type="amcl" output="screen">
+    <param name="base_frame_id"   value="base_footprint"/>
+    <param name="odom_frame_id"   value="odom"/>
+    <param name="global_frame_id" value="map"/>
+    <param name="min_particles" value="500"/>
+    <param name="max_particles" value="3000"/>
+    <param name="odom_model_type" value="diff-corrected"/>
+    <param name="odom_alpha1" value="0.005"/>
+    <param name="odom_alpha2" value="0.005"/>
+    <param name="odom_alpha3" value="0.005"/>
+    <param name="odom_alpha4" value="0.005"/>
+    <param name="laser_model_type" value="likelihood_field"/>
+    <param name="laser_min_range" value="0.50"/>
+    <param name="laser_max_range" value="10.0"/>
+    <param name="laser_max_beams" value="180"/>
+    <param name="laser_z_hit" value="0.95"/>
+    <param name="laser_z_rand" value="0.05"/>
+    <param name="transform_tolerance" value="0.5"/>
+  </node>
+
+  <node name="move_base" pkg="move_base" type="move_base" output="screen">
+    <remap from="cmd_vel" to="cmd_vel_nav"/>
+
+    <param name="base_global_planner" value="navfn/NavfnROS"/>
+    <param name="base_local_planner"  value="teb_local_planner/TebLocalPlannerROS"/>
+    <param name="controller_frequency" value="5.0"/>
+    <param name="planner_frequency" value="0.2"/>
+
+    <!-- 全局代价地图 -->
+    <param name="global_costmap/global_frame" value="map"/>
+    <param name="global_costmap/robot_base_frame" value="base_footprint"/>
+    <param name="global_costmap/static_map" value="true"/>
+    <param name="global_costmap/track_unknown_space" value="false"/>
+    <param name="global_costmap/resolution" value="0.05"/>
+
+    <rosparam param="global_costmap/footprint">[[-0.10,-0.11],[-0.10,0.11],[0.10,0.11],[0.10,-0.11]]</rosparam>
+    <param name="global_costmap/footprint_padding" value="0.01"/>
+
+    <rosparam param="global_costmap/plugins">
+      [{name: static_map, type: "costmap_2d::StaticLayer"},
+       {name: obstacles, type: "costmap_2d::ObstacleLayer"},
+       {name: inflation, type: "costmap_2d::InflationLayer"}]
+    </rosparam>
+
+    <!-- 局部代价地图 -->
+    <param name="local_costmap/global_frame" value="odom"/>
+    <param name="local_costmap/robot_base_frame" value="base_footprint"/>
+    <param name="local_costmap/static_map" value="false"/>
+    <param name="local_costmap/rolling_window" value="true"/>
+    <param name="local_costmap/width" value="4.0"/>
+    <param name="local_costmap/height" value="4.0"/>
+    <param name="local_costmap/resolution" value="0.05"/>
+
+    <rosparam param="local_costmap/footprint">[[-0.10,-0.11],[-0.10,0.11],[0.10,0.11],[0.10,-0.11]]</rosparam>
+    <param name="local_costmap/footprint_padding" value="0.01"/>
+
+    <rosparam param="local_costmap/plugins">
+      [{name: obstacles, type: "costmap_2d::ObstacleLayer"},
+       {name: inflation, type: "costmap_2d::InflationLayer"}]
+    </rosparam>
+
+    <!-- 障碍物层 -->
+    <param name="obstacle_layer/observation_sources" value="scan"/>
+    <param name="obstacle_layer/scan/topic" value="/scan"/>
+    <param name="obstacle_layer/scan/marking" value="true"/>
+    <param name="obstacle_layer/scan/clearing" value="true"/>
+    <param name="obstacle_layer/scan/obstacle_range" value="3.0"/>
+    <param name="obstacle_layer/scan/raytrace_range" value="3.5"/>
+
+    <!-- 膨胀层: 调小让路更宽 -->
+    <param name="inflation_layer/inflation_radius" value="0.20"/>
+    <param name="inflation_layer/cost_scaling_factor" value="5.0"/>
+
+    <!-- TEB 参数 -->
+    <param name="TebLocalPlannerROS/max_vel_x" value="0.6"/>
+    <param name="TebLocalPlannerROS/max_vel_theta" value="1.0"/>
+    <param name="TebLocalPlannerROS/acc_lim_x" value="0.4"/>
+    <param name="TebLocalPlannerROS/acc_lim_theta" value="0.5"/>
+    <param name="TebLocalPlannerROS/min_turning_radius" value="0.2"/>
+    <param name="TebLocalPlannerROS/exact_arc_length" value="true"/>
+
+    <param name="TebLocalPlannerROS/xy_goal_tolerance" value="0.25"/>
+    <param name="TebLocalPlannerROS/yaw_goal_tolerance" value="0.25"/>
+
+    <param name="TebLocalPlannerROS/weight_optimaltime" value="0.5"/>
+    <param name="TebLocalPlannerROS/weight_obstacle" value="50.0"/>
+    <param name="TebLocalPlannerROS/weight_velocity" value="1.0"/>
+    <param name="TebLocalPlannerROS/weight_acceleration" value="1.0"/>
+    <param name="TebLocalPlannerROS/weight_kinematics_forward_drive" value="1000.0"/>
+    <param name="TebLocalPlannerROS/weight_viapoint" value="5.0"/>
+
+    <param name="TebLocalPlannerROS/teb_autosize" value="true"/>
+    <param name="TebLocalPlannerROS/dt_ref" value="0.3"/>
+    <param name="TebLocalPlannerROS/global_plan_viapoint_sep" value="0.5"/>
+    <param name="TebLocalPlannerROS/global_plan_overwrite_orientation" value="true"/>
+    <param name="TebLocalPlannerROS/max_global_plan_lookahead_dist" value="5.0"/>
+    <param name="TebLocalPlannerROS/allow_init_with_backwards_motion" value="false"/>
+  </node>
+
+  <node name="nav_cmd_vel_relay" pkg="topic_tools" type="relay"
+        args="/cmd_vel_nav /cmd_vel"/>
+
+  <!-- RViz 可视化，自动加载预配置 -->
+  <node name="rviz" pkg="rviz" type="rviz" output="screen"
+        args="-d $(find robot_sim)/rviz/navigation.rviz"
+        required="false"/>
+</launch>

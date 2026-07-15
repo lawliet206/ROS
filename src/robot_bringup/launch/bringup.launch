@@ -1,0 +1,118 @@
+<!--
+  bringup.launch — 机器人基础启动
+  ================================
+  启动内容:
+    1. robot_state_publisher (加载 URDF 模型, 发布 TF)
+    2. serial_bridge (J1900 上运行, 连接 ESP32)
+    3. 激光雷达驱动
+
+  使用:
+    roslaunch robot_bringup bringup.launch
+
+  注意:
+    serial_bridge 默认在本地运行 (用于调试)
+    实际部署时在 J1900 上单独启动 serial_bridge.py
+-->
+<launch>
+
+  <!-- ===== 机器人参数 ===== -->
+  <arg name="wheel_dia"   default="0.085" />   <!-- 轮径 (m), 85mm -->
+  <arg name="wheel_base"  default="0.180" />   <!-- 轮距 (m), 两轮中心距 180mm -->
+  <arg name="gear_ratio"  default="10.0" />    <!-- 减速比 1:10 -->
+  <arg name="enc_ppr"     default="11.0" />    <!-- 编码器 PPR -->
+
+  <!-- J1900 串口 -->
+  <arg name="serial_port" default="/dev/ttyUSB0" />
+  <arg name="serial_baud" default="115200" />
+
+  <!-- 激光雷达型号: s9_fsrd / ydlidar_x4 / ydlidar_f2 / rplidar_a1 / rplidar_a2 -->
+  <arg name="lidar_model" default="s9_fsrd" />
+  <arg name="lidar_port"  default="/dev/ttyUSB1" />
+
+  <!-- 是否启动激光雷达驱动 (没雷达时关掉) -->
+  <arg name="start_lidar" default="true" />
+
+  <!-- 是否启动串口桥接 (J1900 上单独启动时, PC 端设为 false) -->
+  <arg name="start_bridge" default="true" />
+
+  <!-- ============================================================ -->
+  <!-- 1. Robot State Publisher (URDF → TF 静态变换)                -->
+  <!-- ============================================================ -->
+  <param name="robot_description"
+         textfile="$(find robot_bringup)/urdf/robot.urdf" />
+
+  <node name="robot_state_publisher" pkg="robot_state_publisher" type="robot_state_publisher">
+    <param name="publish_frequency" value="50.0" />
+  </node>
+
+  <!-- ============================================================ -->
+  <!-- 2. 串口桥接 (serial_bridge) — 在 J1900 上运行                   -->
+  <!-- ============================================================ -->
+  <!--
+    实物部署时 serial_bridge 在 J1900 上单独启动:
+      rosrun robot_bringup serial_bridge.py _port:=/dev/ttyUSB0
+    PC 端启动 launch 时设 start_bridge:=false
+  -->
+  <node if="$(arg start_bridge)" name="serial_bridge"
+        pkg="robot_bringup" type="serial_bridge.py" output="screen">
+    <param name="port"       value="$(arg serial_port)" />
+    <param name="baud"       value="$(arg serial_baud)" />
+    <param name="wheel_dia"  value="$(arg wheel_dia)" />
+    <param name="wheel_base" value="$(arg wheel_base)" />
+    <param name="gear_ratio" value="$(arg gear_ratio)" />
+    <param name="enc_ppr"    value="$(arg enc_ppr)" />
+  </node>
+
+  <!-- ============================================================ -->
+  <!-- 3. 激光雷达驱动                                                  -->
+  <!-- ============================================================ -->
+  <!--
+    YDLIDAR X4 驱动安装:
+      cd ~/catkin_ws/src
+      git clone https://github.com/YDLIDAR/ydlidar_ros.git
+      cd .. && catkin_make
+
+    RPLIDAR A1 驱动安装:
+      sudo apt install ros-noetic-rplidar-ros
+  -->
+  <group if="$(arg start_lidar)">
+    <!-- YDLIDAR X4 -->
+    <node if="$(eval lidar_model == 'ydlidar_x4')"
+          name="ydlidar_node" pkg="ydlidar_ros" type="ydlidar_node"
+          output="screen">
+      <param name="port"       value="$(arg lidar_port)" />
+      <param name="baudrate"   value="128000" />
+      <param name="frame_id"   value="laser_link" />
+      <param name="frequency"  value="10.0" />
+      <param name="angle_min"  value="-180" />
+      <param name="angle_max"  value="180" />
+    </node>
+
+    <!-- YDLIDAR F2 (USB 转 TTL) -->
+    <include if="$(eval lidar_model == 'ydlidar_f2')"
+             file="$(find ydlidar_ros)/launch/F2.launch">
+      <arg name="port"      value="$(arg lidar_port)" />
+      <arg name="baudrate"  value="230400" />
+      <arg name="frame_id"  value="laser_link" />
+      <arg name="frequency" value="10.0" />
+    </include>
+
+    <!-- S9-FSRD-V1.0 (扫地机器人拆机, 115200, AA55协议) -->
+    <node if="$(eval lidar_model == 's9_fsrd')"
+          name="s9_lidar" pkg="robot_bringup" type="s9_lidar_driver.py"
+          output="screen">
+      <param name="port"      value="$(arg lidar_port)" />
+      <param name="frame_id"  value="laser_link" />
+    </node>
+
+    <!-- RPLIDAR -->
+    <node if="$(eval lidar_model == 'rplidar_a1')"
+          name="rplidar_node" pkg="rplidar_ros" type="rplidarNode"
+          output="screen">
+      <param name="serial_port"  value="$(arg lidar_port)" />
+      <param name="serial_baudrate" value="115200" />
+      <param name="frame_id"     value="laser_link" />
+    </node>
+  </group>
+
+</launch>

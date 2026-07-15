@@ -1,0 +1,225 @@
+<!--
+  navigation.launch — move_base 多点导航 (一键启动)
+  ===================================================
+  功能: 加载已有地图 + AMCL 定位 + move_base 路径规划
+
+  使用:
+    roslaunch robot_bringup navigation.launch map_file:=/home/user/maps/my_map.yaml
+
+  然后发送目标点:
+    rosrun robot_bringup send_goals.py _goals:="[(1,2,0), (3,4,1.57)]"
+
+  或在 RViz 中用 "2D Nav Goal" 工具点击目标
+
+  依赖:
+    - 地图已建好 (map_server)
+    - move_base 配置文件 (costmap_common.yaml, local_costmap_params.yaml 等)
+    - AMCL 配置
+-->
+
+<launch>
+
+  <!-- ===== 参数 ===== -->
+  <arg name="map_file"     default="" />
+  <arg name="lidar_model"  default="s9_fsrd" />
+  <arg name="lidar_port"   default="/dev/ttyUSB1" />
+  <arg name="start_lidar"  default="true" />  <!-- 实物部署时设 false -->
+
+  <!-- ============================================================ -->
+  <!-- 1. 基础启动 (URDF + 桥接 + 雷达)                              -->
+  <!-- ============================================================ -->
+  <include file="$(find robot_bringup)/launch/bringup.launch">
+    <arg name="lidar_model"  value="$(arg lidar_model)" />
+    <arg name="lidar_port"   value="$(arg lidar_port)" />
+    <arg name="start_lidar"  value="$(arg start_lidar)" />
+    <arg name="start_bridge" value="false" />
+  </include>
+
+  <!-- ============================================================ -->
+  <!-- 2. 地图服务 (map_server)                                      -->
+  <!-- ============================================================ -->
+  <!--
+    加载之前 gmapping 保存的地图 (map_saver 生成的 .yaml + .pgm)
+
+    地图文件格式 (test_map.yaml):
+      image: test_map.pgm
+      resolution: 0.05
+      origin: [-15.0, -15.0, 0.0]
+      negate: 0
+      occupied_thresh: 0.65
+      free_thresh: 0.196
+  -->
+  <node name="map_server" pkg="map_server" type="map_server"
+        args="$(arg map_file)" output="screen">
+    <param name="frame_id" value="map" />
+  </node>
+
+  <!-- ============================================================ -->
+  <!-- 3. AMCL 定位 (自适应蒙特卡洛定位)                                -->
+  <!-- ============================================================ -->
+  <!--
+    AMCL 用粒子滤波在已知地图中估计机器人位姿.
+    需要激光+里程计, 发布 map→odom 变换.
+
+    初始位姿建议:
+      - RViz 中用 "2D Pose Estimate" 设置
+      - 或通过 /initialpose 话题发送
+  -->
+  <node name="amcl" pkg="amcl" type="amcl" output="screen">
+    <!-- 通用设置 -->
+    <param name="base_frame_id"      value="base_footprint" />
+    <param name="odom_frame_id"      value="odom" />
+    <param name="global_frame_id"    value="map" />
+
+    <!-- 粒子数 (15m地图用300-500粒子足够) -->
+    <param name="min_particles"      value="100" />
+    <param name="max_particles"      value="500" />
+
+    <!-- 初始位姿不确定性 -->
+    <param name="initial_pose_x"     value="0.0" />
+    <param name="initial_pose_y"     value="0.0" />
+    <param name="initial_pose_a"     value="0.0" />
+    <param name="initial_cov_xx"     value="0.25" />
+    <param name="initial_cov_yy"     value="0.25" />
+    <param name="initial_cov_aa"     value="0.068" />
+
+    <!-- 里程计噪声模型 (根据实际调整) -->
+    <param name="odom_model_type"    value="diff-corrected" />
+    <param name="odom_alpha1"        value="0.2" />   <!-- 旋转噪声 (来自旋转) -->
+    <param name="odom_alpha2"        value="0.2" />   <!-- 旋转噪声 (来自平移) -->
+    <param name="odom_alpha3"        value="0.2" />   <!-- 平移噪声 (来自平移) -->
+    <param name="odom_alpha4"        value="0.2" />   <!-- 平移噪声 (来自旋转) -->
+
+    <!-- 激光模型 -->
+    <param name="laser_model_type"    value="likelihood_field" />
+    <param name="laser_min_range"     value="0.15" />
+    <param name="laser_max_range"     value="8.0" />
+    <param name="laser_max_beams"     value="60" />     <!-- 均匀采样60束激光 (降算力) -->
+    <param name="laser_z_hit"         value="0.95" />
+    <param name="laser_z_rand"        value="0.05" />
+
+    <!-- 重采样 -->
+    <param name="resample_interval"   value="1" />
+    <param name="update_min_d"        value="0.2" />
+    <param name="update_min_a"        value="0.2" />
+
+    <!-- 发布速率 -->
+    <param name="transform_tolerance" value="0.3" />
+  </node>
+
+  <!-- ============================================================ -->
+  <!-- 4. move_base 导航                                             -->
+  <!-- ============================================================ -->
+  <!--
+    move_base 需要的配置文件 (用户自行创建):
+      - config/costmap_common.yaml     (障碍物层 + 膨胀层参数)
+      - config/local_costmap_params.yaml  (局部代价地图)
+      - config/global_costmap_params.yaml (全局代价地图)
+      - config/base_local_planner_params.yaml (局部规划器)
+      - config/global_planner_params.yaml     (全局规划器)
+      - config/move_base_params.yaml          (move_base 主参数)
+
+    把这些 .yaml 文件放在 robot_bringup/config/ 目录下,
+    然后在下方 <rosparam> 中加载.
+
+    以下给出一套可用的默认参数, 直接在 launch 中加载.
+  -->
+
+  <!--
+    move_base 发布到 /cmd_vel_nav, 由 relay 转发到 /cmd_vel。
+    如果同时使用跟随/遥控, 需改用 cmd_vel_mux 做多路切换。
+  -->
+  <node name="move_base" pkg="move_base" type="move_base" output="screen">
+    <remap from="cmd_vel" to="cmd_vel_nav"/>
+
+    <param name="oscillation_timeout"     value="20.0" />
+    <param name="oscillation_distance"    value="0.5" />
+    <param name="clearing_rotation_allowed" value="true" />
+
+    <param name="base_global_planner"  value="navfn/NavfnROS" />
+    <param name="base_local_planner"   value="teb_local_planner/TebLocalPlannerROS" />
+
+    <param name="controller_frequency"  value="5.0" />
+    <param name="planner_frequency"     value="0.2" />
+
+    <!-- 全局代价地图 -->
+    <param name="global_costmap/global_frame"        value="map" />
+    <param name="global_costmap/robot_base_frame"    value="base_footprint" />
+    <param name="global_costmap/update_frequency"    value="1.0" />
+    <param name="global_costmap/publish_frequency"   value="0.5" />
+    <param name="global_costmap/static_map"          value="true" />
+    <param name="global_costmap/rolling_window"      value="false" />
+    <param name="global_costmap/resolution"          value="0.05" />
+
+    <rosparam param="global_costmap/footprint">[[-0.10,-0.11],[-0.10,0.11],[0.10,0.11],[0.10,-0.11]]</rosparam>
+    <param name="global_costmap/footprint_padding" value="0.01"/>
+
+    <rosparam param="global_costmap/plugins">
+      [{name: static_map, type: "costmap_2d::StaticLayer"},
+       {name: obstacles,  type: "costmap_2d::ObstacleLayer"},
+       {name: inflation,  type: "costmap_2d::InflationLayer"}]
+    </rosparam>
+
+    <!-- 局部代价地图 -->
+    <param name="local_costmap/global_frame"         value="odom" />
+    <param name="local_costmap/robot_base_frame"     value="base_footprint" />
+    <param name="local_costmap/update_frequency"     value="5.0" />
+    <param name="local_costmap/publish_frequency"    value="1.0" />
+    <param name="local_costmap/static_map"           value="false" />
+    <param name="local_costmap/rolling_window"       value="true" />
+    <param name="local_costmap/width"                value="4.0" />
+    <param name="local_costmap/height"               value="4.0" />
+    <param name="local_costmap/resolution"           value="0.05" />
+
+    <rosparam param="local_costmap/footprint">[[-0.10,-0.11],[-0.10,0.11],[0.10,0.11],[0.10,-0.11]]</rosparam>
+    <param name="local_costmap/footprint_padding" value="0.01"/>
+
+    <rosparam param="local_costmap/plugins">
+      [{name: obstacles, type: "costmap_2d::ObstacleLayer"},
+       {name: inflation, type: "costmap_2d::InflationLayer"}]
+    </rosparam>
+
+    <!-- 障碍物层 -->
+    <param name="obstacle_layer/observation_sources"  value="scan" />
+    <param name="obstacle_layer/scan/topic"           value="/scan" />
+    <param name="obstacle_layer/scan/marking"         value="true" />
+    <param name="obstacle_layer/scan/clearing"        value="true" />
+    <param name="obstacle_layer/scan/obstacle_range"  value="3.0" />
+    <param name="obstacle_layer/scan/raytrace_range"  value="3.5" />
+
+    <param name="inflation_layer/inflation_radius"    value="0.20" />
+    <param name="inflation_layer/cost_scaling_factor"   value="5.0" />
+
+    <!-- TEB 参数 (来自仿真验证过的配置) -->
+    <param name="TebLocalPlannerROS/max_vel_x"            value="0.6" />
+    <param name="TebLocalPlannerROS/max_vel_theta"        value="1.0" />
+    <param name="TebLocalPlannerROS/acc_lim_x"            value="0.4" />
+    <param name="TebLocalPlannerROS/acc_lim_theta"        value="0.5" />
+    <param name="TebLocalPlannerROS/min_turning_radius"   value="0.2" />
+    <param name="TebLocalPlannerROS/exact_arc_length"     value="true" />
+
+    <param name="TebLocalPlannerROS/xy_goal_tolerance"    value="0.25" />
+    <param name="TebLocalPlannerROS/yaw_goal_tolerance"   value="0.25" />
+
+    <param name="TebLocalPlannerROS/weight_optimaltime"   value="0.5" />
+    <param name="TebLocalPlannerROS/weight_obstacle"      value="50.0" />
+    <param name="TebLocalPlannerROS/weight_velocity"      value="1.0" />
+    <param name="TebLocalPlannerROS/weight_acceleration"  value="1.0" />
+    <param name="TebLocalPlannerROS/weight_kinematics_forward_drive" value="1000.0" />
+    <param name="TebLocalPlannerROS/weight_viapoint"      value="5.0" />
+
+    <param name="TebLocalPlannerROS/teb_autosize"         value="true" />
+    <param name="TebLocalPlannerROS/dt_ref"               value="0.3" />
+    <param name="TebLocalPlannerROS/global_plan_viapoint_sep" value="0.5" />
+    <param name="TebLocalPlannerROS/global_plan_overwrite_orientation" value="true" />
+    <param name="TebLocalPlannerROS/max_global_plan_lookahead_dist" value="5.0" />
+    <param name="TebLocalPlannerROS/allow_init_with_backwards_motion" value="false" />
+  </node>
+
+  <!-- ============================================================ -->
+  <!-- 5. cmd_vel 转发: /cmd_vel_nav → /cmd_vel                     -->
+  <!-- ============================================================ -->
+  <node name="nav_cmd_vel_relay" pkg="topic_tools" type="relay"
+        args="/cmd_vel_nav /cmd_vel" />
+
+</launch>

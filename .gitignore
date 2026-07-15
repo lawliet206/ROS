@@ -1,0 +1,26 @@
+# catkin 编译产物
+build/
+devel/
+install/
+*.pyc
+__pycache__/
+
+# IDE/编辑器
+.vscode/
+.idea/
+
+# Claude/OpenCode 工具状态
+.claude/
+.claud/
+.omo/
+.waylog/
+
+# 第三方 vendored 目录（YDLIDAR 自带 git，不嵌套）
+YDLIDAR/
+YDLIDAR/ydlidar_ws/log
+
+# 系统文件
+.DS_Store
+*.swp
+*.swo
+*~

@@ -1,0 +1,148 @@
+<?xml version="1.0"?>
+<!--
+  两轮差速机器人 URDF 模型
+  ==========================
+  简化模型用于 TF 树和可视化:
+    base_footprint → base_link → (left_wheel, right_wheel, imu_link, laser_link)
+
+  坐标系约定:
+    base_footprint: 地面投影 (用于里程计)
+    base_link:      车体中心 (真实的物理参考系)
+    imu_link:       IMU 安装位置 (前上方偏置)
+    laser_link:     激光雷达安装位置 (车顶中心)
+-->
+
+<robot name="diff_drive_robot">
+
+  <!-- ===== 基础连杆: 车体底板 ===== -->
+  <link name="base_footprint">
+    <visual>
+      <geometry>
+        <box size="0.20 0.22 0.02"/>
+      </geometry>
+      <material name="gray">
+        <color rgba="0.5 0.5 0.5 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <link name="base_link">
+    <visual>
+      <geometry>
+        <box size="0.20 0.22 0.12"/>
+      </geometry>
+      <material name="blue">
+        <color rgba="0.2 0.5 0.8 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- ===== 左轮 ===== -->
+  <link name="left_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="0.0425" length="0.04"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- ===== 右轮 ===== -->
+  <link name="right_wheel">
+    <visual>
+      <geometry>
+        <cylinder radius="0.0425" length="0.04"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- ===== IMU ===== -->
+  <link name="imu_link">
+    <visual>
+      <geometry>
+        <box size="0.02 0.02 0.02"/>
+      </geometry>
+      <material name="green">
+        <color rgba="0 1 0 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- ===== 万向轮 (前支撑) ===== -->
+  <link name="caster_wheel">
+    <visual>
+      <geometry>
+        <sphere radius="0.008"/>
+      </geometry>
+      <material name="gray">
+        <color rgba="0.5 0.5 0.5 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- ===== 激光雷达 ===== -->
+  <link name="laser_link">
+    <visual>
+      <geometry>
+        <cylinder radius="0.04" length="0.03"/>
+      </geometry>
+      <material name="red">
+        <color rgba="1 0 0 1"/>
+      </material>
+    </visual>
+  </link>
+
+  <!-- ========================================================== -->
+  <!-- Joint 连接                                                    -->
+  <!-- ========================================================== -->
+
+  <!-- base_footprint → base_link (高 5cm) -->
+  <joint name="footprint_to_base" type="fixed">
+    <parent link="base_footprint"/>
+    <child  link="base_link"/>
+    <origin xyz="0 0 0.0425"/>   <!-- 85mm轮半径 = 42.5mm -->
+  </joint>
+
+  <!-- base_link → left_wheel (连续转动) -->
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child  link="left_wheel"/>
+    <origin xyz="0 0.090 0" rpy="-1.5708 0 0"/>
+    <axis xyz="0 0 1"/>   <!-- Z in joint frame → Y in parent (正确滚动轴) -->
+  </joint>
+
+  <!-- base_link → right_wheel (连续转动) -->
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child  link="right_wheel"/>
+    <origin xyz="0 -0.090 0" rpy="-1.5708 0 0"/>
+    <axis xyz="0 0 1"/>
+  </joint>
+
+  <!-- base_link → IMU (前上方) -->
+  <joint name="imu_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="imu_link"/>
+    <origin xyz="0.05 0 0.06"/>
+  </joint>
+
+  <!-- base_link → 万向轮 (前方底部) -->
+  <joint name="caster_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="caster_wheel"/>
+    <origin xyz="0.08 0 -0.034"/>     <!-- 牛眼轮29mm高, ball r~8mm, base 42.5mm -->
+  </joint>
+
+  <!-- base_link → 激光雷达 (顶部中心) -->
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="laser_link"/>
+    <origin xyz="0 0 0.18"/>
+  </joint>
+
+</robot>

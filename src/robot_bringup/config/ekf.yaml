@@ -1,0 +1,41 @@
+# robot_localization EKF 配置 — 融合编码器里程计 + IMU
+# 安装: sudo apt install ros-noetic-robot-localization
+
+frequency: 30
+
+silent_tf_failure: false
+two_d_mode: true
+
+# 发布 odom → base_footprint TF (替代 serial_bridge 的 TF)
+publish_tf: true
+
+odom_frame: odom
+base_link_frame: base_footprint
+world_frame: odom
+
+# --- 里程计输入 ---
+odom0: /odom
+odom0_config:
+  [true,  true,  false,    # x, y, z
+   false, false, true,     # roll, pitch, yaw
+   true,  false, false,    # vx, vy, vz
+   false, false, true,     # vroll, vpitch, vyaw
+   false, false, false]    # ax, ay, az
+
+# --- IMU 输入 ---
+imu0: /imu
+imu0_config:
+  [false, false, false,    # x, y, z
+   false, false, false,    # roll, pitch, yaw
+   false, false, false,    # vx, vy, vz
+   false, false, true,     # vroll, vpitch, vyaw
+   true,  false, false]    # ax, ay, az
+
+# 差分模式下的位姿预测
+differential: false
+
+# 传感器超时 (秒)
+odom0_differential: false
+imu0_differential: false
+odom0_queue_size: 10
+imu0_queue_size: 10

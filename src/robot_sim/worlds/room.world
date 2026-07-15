@@ -1,0 +1,321 @@
+<?xml version="1.0" ?>
+<!--
+  room.world — 15m × 15m 仿真环境
+  ================================
+  模拟考核场景: 带围墙和障碍物的室内区域
+  包含: 四面墙 + 6个障碍物 (箱子/柱子)
+-->
+<sdf version="1.6">
+  <world name="room">
+
+    <!-- ===== 物理引擎（bullet 兼容 VM）===== -->
+    <physics type="ode">
+      <max_step_size>0.001</max_step_size>
+      <real_time_update_rate>1000</real_time_update_rate>
+      <gravity>0 0 -9.81</gravity>
+    </physics>
+
+    <!-- ===== 光照 ===== -->
+    <light name="sun" type="directional">
+      <pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>0.0 0.0 -1.0</direction>
+      <cast_shadows>false</cast_shadows>
+    </light>
+
+    <!-- ===== 地面 ===== -->
+    <model name="ground">
+      <static>true</static>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>20 20 0.01</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>20 20 0.01</size>
+            </box>
+          </geometry>
+          <material>
+            <ambient>0.3 0.3 0.3 1</ambient>
+            <diffuse>0.6 0.6 0.6 1</diffuse>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================ -->
+    <!-- 1. 四面围墙 — 模拟 ~15m 区域                                    -->
+    <!-- 用标准 3m×0.15m×2.5m 砖块拼接                                    -->
+    <!-- ============================================================ -->
+
+    <!-- 南墙 (y=-7.5) -->
+    <model name="wall_south">
+      <static>true</static>
+      <pose>0 -7.5 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>15 0.15 2.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>15 0.15 2.5</size>
+            </box>
+          </geometry>
+          <material>
+            <script>Gazebo/Bricks</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 北墙 (y=+7.5) -->
+    <model name="wall_north">
+      <static>true</static>
+      <pose>0 7.5 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>15 0.15 2.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>15 0.15 2.5</size>
+            </box>
+          </geometry>
+          <material>
+            <script>Gazebo/Bricks</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 西墙 (x=-7.5, 留一段缺口当门) -->
+    <model name="wall_west">
+      <static>true</static>
+      <pose>-7.5 0 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.15 15 2.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.15 15 2.5</size>
+            </box>
+          </geometry>
+          <material>
+            <script>Gazebo/Bricks</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 东墙 (x=+7.5, 留一段缺口) -->
+    <model name="wall_east">
+      <static>true</static>
+      <pose>7.5 0 1.25 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.15 15 2.5</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.15 15 2.5</size>
+            </box>
+          </geometry>
+          <material>
+            <script>Gazebo/Bricks</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================ -->
+    <!-- 2. 内部障碍物 — 箱子/柱子, 分散在场地中                            -->
+    <!-- ============================================================ -->
+
+    <!-- 纸箱 (3, 2) -->
+    <model name="box_1">
+      <static>true</static>
+      <pose>3 2 0.4 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.6 0.6 0.8</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.6 0.6 0.8</size>
+            </box>
+          </geometry>
+          <material>
+            <script>Gazebo/Wood</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 纸箱 (-2, 3) -->
+    <model name="box_2">
+      <static>true</static>
+      <pose>-2 3 0.3 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.5 0.5 0.6</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.5 0.5 0.6</size>
+            </box>
+          </geometry>
+          <material>
+            <script>Gazebo/Wood</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 柱子 (5, -3) -->
+    <model name="pillar_1">
+      <static>true</static>
+      <pose>5 -3 0.75 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>1.5</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>1.5</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <script>Gazebo/Grey</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 柱子 (-4, -2) -->
+    <model name="pillar_2">
+      <static>true</static>
+      <pose>-4 -2 0.75 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>1.5</length>
+            </cylinder>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <cylinder>
+              <radius>0.2</radius>
+              <length>1.5</length>
+            </cylinder>
+          </geometry>
+          <material>
+            <script>Gazebo/Grey</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 扁箱子 (-2, -4) -->
+    <model name="box_3">
+      <static>true</static>
+      <pose>-2 -4 0.5 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.8 0.4 1.0</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.8 0.4 1.0</size>
+            </box>
+          </geometry>
+          <material>
+            <script>Gazebo/Wood</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- 箱子 (4, 5) -->
+    <model name="box_4">
+      <static>true</static>
+      <pose>4 5 0.4 0 0 0.3</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.8 0.5 0.8</size>
+            </box>
+          </geometry>
+        </collision>
+        <visual name="visual">
+          <geometry>
+            <box>
+              <size>0.8 0.5 0.8</size>
+            </box>
+          </geometry>
+          <material>
+            <script>Gazebo/Wood</script>
+          </material>
+        </visual>
+      </link>
+    </model>
+
+    <!-- ============================================================ -->
+    <!-- 人体跟随测试 (双柱, 仅视觉无碰撞, 跟随仿真时用)                 -->
+    <!-- ============================================================ -->
+    <!-- 默认禁用, 需要跟随测试时取消注释即可 -->
+
+  </world>
+</sdf>

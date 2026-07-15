@@ -1,0 +1,220 @@
+<?xml version="1.0"?>
+<robot name="diff_drive_robot">
+
+  <material name="gray">  <color rgba="0.5 0.5 0.5 1"/></material>
+  <material name="blue">  <color rgba="0.2 0.5 0.8 1"/></material>
+  <material name="black"> <color rgba="0.1 0.1 0.1 1"/></material>
+  <material name="red">   <color rgba="1 0 0 1"/></material>
+
+  <!-- ============================================================ -->
+  <!-- base_footprint (world origin) -->
+  <!-- ============================================================ -->
+  <link name="base_footprint"/>
+
+  <!-- ============================================================ -->
+  <!-- base_link -->
+  <!-- ============================================================ -->
+  <link name="base_link">
+    <visual>
+      <geometry><box size="0.20 0.22 0.12"/></geometry>
+      <origin xyz="0 0 0.06"/>
+      <material name="blue"/>
+    </visual>
+    <collision>
+      <geometry><box size="0.20 0.22 0.12"/></geometry>
+      <origin xyz="0 0 0.06"/>
+    </collision>
+    <inertial>
+      <mass value="3.0"/>
+      <origin xyz="0 0 0.06"/>
+      <inertia ixx="0.0192" ixy="0" ixz="0" iyy="0.0261" iyz="0" izz="0.0381"/>
+    </inertial>
+  </link>
+
+  <!-- ============================================================ -->
+  <!-- left_wheel — 参考 TurtleBot3 模式 -->
+  <!-- ============================================================ -->
+  <link name="left_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.0425" length="0.04"/></geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.0425" length="0.04"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.15"/>
+      <inertia ixx="0.00023" ixy="0" ixz="0" iyy="0.00042" iyz="0" izz="0.00023"/>
+    </inertial>
+  </link>
+
+  <!-- ============================================================ -->
+  <!-- right_wheel -->
+  <!-- ============================================================ -->
+  <link name="right_wheel">
+    <visual>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.0425" length="0.04"/></geometry>
+      <material name="black"/>
+    </visual>
+    <collision>
+      <origin xyz="0 0 0" rpy="1.5708 0 0"/>
+      <geometry><cylinder radius="0.0425" length="0.04"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.15"/>
+      <inertia ixx="0.00023" ixy="0" ixz="0" iyy="0.00042" iyz="0" izz="0.00023"/>
+    </inertial>
+  </link>
+
+  <!-- ============================================================ -->
+  <!-- caster_front — 前万向轮 -->
+  <!-- ============================================================ -->
+  <link name="caster_front">
+    <visual>
+      <geometry><sphere radius="0.012"/></geometry>
+      <material name="gray"/>
+    </visual>
+    <collision>
+      <geometry><sphere radius="0.012"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.005"/>
+      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+    </inertial>
+  </link>
+
+  <!-- caster_rear — 后万向轮 -->
+  <link name="caster_rear">
+    <visual>
+      <geometry><sphere radius="0.012"/></geometry>
+      <material name="gray"/>
+    </visual>
+    <collision>
+      <geometry><sphere radius="0.012"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.005"/>
+      <inertia ixx="1e-7" ixy="0" ixz="0" iyy="1e-7" iyz="0" izz="1e-7"/>
+    </inertial>
+  </link>
+
+  <!-- ============================================================ -->
+  <!-- laser_link -->
+  <!-- ============================================================ -->
+  <link name="laser_link">
+    <visual>
+      <geometry><cylinder radius="0.04" length="0.03"/></geometry>
+      <material name="red"/>
+    </visual>
+    <collision>
+      <geometry><cylinder radius="0.04" length="0.03"/></geometry>
+    </collision>
+    <inertial>
+      <mass value="0.1"/>
+      <inertia ixx="0.00005" ixy="0" ixz="0" iyy="0.00005" iyz="0" izz="0.00008"/>
+    </inertial>
+  </link>
+
+  <!-- ============================================================ -->
+  <!-- Joints -->
+  <!-- ============================================================ -->
+
+  <joint name="footprint_to_base" type="fixed">
+    <parent link="base_footprint"/>
+    <child  link="base_link"/>
+    <origin xyz="0 0 0.0425"/>   <!-- 轮轴高度 = 轮半径 42.5mm -->
+  </joint>
+
+  <joint name="left_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child  link="left_wheel"/>
+    <origin xyz="0 0.090 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <joint name="right_wheel_joint" type="continuous">
+    <parent link="base_link"/>
+    <child  link="right_wheel"/>
+    <origin xyz="0 -0.090 0"/>
+    <axis xyz="0 1 0"/>
+  </joint>
+
+  <joint name="caster_front_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="caster_front"/>
+    <origin xyz="0.08 0 -0.031"/>   <!-- 球径 12mm, 触地: 0.0425+z = 0.012 → z=-0.0305 -->
+  </joint>
+
+  <joint name="caster_rear_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="caster_rear"/>
+    <origin xyz="-0.08 0 -0.0255"/>   <!-- 比地面高 5mm, 仅防仰头 -->
+  </joint>
+
+  <joint name="laser_joint" type="fixed">
+    <parent link="base_link"/>
+    <child  link="laser_link"/>
+    <origin xyz="0 0 0.18"/>
+  </joint>
+
+  <!-- ============================================================ -->
+  <!-- Gazebo diff_drive plugin — 使用 velocity control -->
+  <!-- ============================================================ -->
+  <gazebo>
+    <plugin name="diff_drive_controller" filename="libgazebo_ros_diff_drive.so">
+      <leftJoint>left_wheel_joint</leftJoint>
+      <rightJoint>right_wheel_joint</rightJoint>
+      <wheelSeparation>0.180</wheelSeparation>
+      <wheelDiameter>0.085</wheelDiameter>
+      <wheelTorque>5.0</wheelTorque>
+      <wheelAcceleration>2.0</wheelAcceleration>
+      <commandTopic>cmd_vel</commandTopic>
+      <odometryTopic>odom</odometryTopic>
+      <odometryFrame>odom</odometryFrame>
+      <robotBaseFrame>base_footprint</robotBaseFrame>
+      <publishWheelTF>false</publishWheelTF>
+      <publishOdomTF>true</publishOdomTF>
+      <publishWheelJointState>true</publishWheelJointState>
+      <updateRate>50.0</updateRate>
+      <odometrySource>world</odometrySource>
+    </plugin>
+  </gazebo>
+
+  <!-- ============================================================ -->
+  <!-- Gazebo laser plugin -->
+  <!-- ============================================================ -->
+  <gazebo reference="laser_link">
+    <sensor type="ray" name="laser_scanner">
+      <pose>0 0 0 0 0 0</pose>
+      <update_rate>10</update_rate>
+      <ray>
+        <scan>
+          <horizontal>
+            <samples>360</samples>
+            <resolution>1</resolution>
+            <min_angle>-3.14159</min_angle>
+            <max_angle>3.14159</max_angle>
+          </horizontal>
+        </scan>
+        <range>
+          <min>0.50</min>     <!-- 抬高到 0.5m, 排除车体干扰 -->
+          <max>8.0</max>
+          <resolution>0.01</resolution>
+        </range>
+        <noise>
+          <type>gaussian</type>
+          <mean>0.0</mean>
+          <stddev>0.0</stddev>
+        </noise>
+      </ray>
+      <plugin name="laser_controller" filename="libgazebo_ros_laser.so">
+        <topicName>scan</topicName>
+        <frameName>laser_link</frameName>
+      </plugin>
+    </sensor>
+  </gazebo>
+
+</robot>
