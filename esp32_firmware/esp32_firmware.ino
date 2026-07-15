@@ -2,15 +2,12 @@
 #include <math.h>
 #include "driver/pcnt.h" 
 #include "esp_timer.h" 
-#include "esp_task_wdt.h"
 #include <ros.h>
 #include <geometry_msgs/Twist.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Imu.h>
 
-// ============================================================
-// 1. 硬件与物理参数
-// ============================================================
+
 #define PIN_L_IN1    25
 #define PIN_L_IN2    26
 #define PIN_L_PWM    18
@@ -27,24 +24,25 @@
 #define I2C_SDA       21
 #define I2C_SCL       22
 
-#define LEDC_CH_L_PWM  0
-#define LEDC_CH_R_PWM  1
 #define LEDC_FREQ      20000
 #define LEDC_RES       10
 
-// 🔄 根据你的实际硬件更新参数
-#define WHEEL_DIAMETER      0.085f      // 轮径 8.5cm
-#define WHEEL_BASE          0.180f      // 轮距 18cm
-#define GEAR_RATIO          10.0f       // 减速比 10:1
-#define ENCODER_PPR         11.0f       // 编码器基础脉冲数 11PPR
+#define WHEEL_DIAMETER      0.085f      
+#define WHEEL_BASE          0.180f      
+#define GEAR_RATIO          10.0f       
+#define ENCODER_PPR         11.0f       
 #define ENCODER_TICKS_PER_REV (ENCODER_PPR * 4.0f) 
 #define METERS_PER_TICK     (M_PI * WHEEL_DIAMETER / (ENCODER_TICKS_PER_REV * GEAR_RATIO))
 
-// 🛠️ 方向修正宏 (如果前进时里程计倒退，或 PID 反转，把对应的 1 改成 -1)
+// 编码器方向系数 — 实车验证方法：
+//   1. 先设两侧均为 1，手动推车前进 1 米
+//   2. serial_bridge 打印 /odom position.x，若为正值则前进方向正确
+//   3. 若 position.x 为负值，将两轮系数互换符号（如 1→-1, -1→1）
+//   4. 再验证转向：原地旋转 90°，/odom orientation.z 应正确累积
+//   5. 最后验证左右轮差速方向是否一致，若两轮转速相反则取反一侧
 #define ENC_LEFT_DIR       1
 #define ENC_RIGHT_DIR      1
 
-// --- 控制与安全参数 ---
 #define MAX_RAMP_RPM_PER_SEC  800.0f  
 #define RPM_FILTER_ALPHA      0.3f    
 #define RPM_STOP_THRESHOLD    1.0f    
@@ -60,21 +58,14 @@
 #define STALL_DETECT_RPM_THRESH  5.0f
 #define STALL_DETECT_TIME_MS     500
 
-// ============================================================
-// 2. ROS 节点与消息定义
-// ============================================================
 ros::NodeHandle nh;
 
-geometry_msgs::Twist cmd_vel_msg;
 nav_msgs::Odometry odom_msg;
 sensor_msgs::Imu imu_msg;
 
 ros::Publisher pub_odom("odom", &odom_msg);
 ros::Publisher pub_imu("imu", &imu_msg);
 
-// ============================================================
-// 3. 全局变量与状态
-// ============================================================
 struct PIDState { 
   float kp, ki, kd;
   float integral;
@@ -105,27 +96,31 @@ unsigned long stall_timer_start_r = 0;
 bool stall_fault_l = false;
 bool stall_fault_r = false;
 
+#define MPU6050_ADDR 0x68
+#define IMU_LP_ALPHA  0.30f
+#define CALIB_SAMPLES 200
+
+float gbias_x = 0, gbias_y = 0, gbias_z = 0;
+float abias_x = 0, abias_y = 0, abias_z = 0;
+bool imu_calibrated = false;
+bool imu_data_valid = false; 
+
 float imu_ax = 0, imu_ay = 0, imu_az = 0;
 float imu_gx = 0, imu_gy = 0, imu_gz = 0;
-bool  imu_data_valid = false; 
+float accel_scale = 1.0f;
+bool imu_healthy = true;
 
-// IMU 低通滤波状态
-#define IMU_LP_ALPHA  0.15f        // 滤波系数 (越小越平滑)
-float imu_ax_f = 0, imu_ay_f = 0, imu_az_f = 0;
-float imu_gx_f = 0, imu_gy_f = 0, imu_gz_f = 0;
+#define COMP_GAIN      0.85f
+#define GYRO_DEADBAND  0.002f
+float cf_roll = 0, cf_pitch = 0;
+float cf_yaw = 0;
 
-// 陀螺仪零偏（启动时校准）
-#define IMU_CALIB_SAMPLES  200
-float gyro_bias_x = 0, gyro_bias_y = 0, gyro_bias_z = 0;
-bool  imu_calibrated = false;
+float normalize_angle(float a) {
+  while (a > M_PI) a -= 2 * M_PI;
+  while (a < -M_PI) a += 2 * M_PI;
+  return a;
+}
 
-// 互补滤波姿态估计
-float roll_est = 0, pitch_est = 0;
-uint8_t imu_timeout_count = 0; 
-
-// ============================================================
-// 4. PCNT 硬件编码器初始化
-// ============================================================
 void setup_pcnt(pcnt_unit_t unit, int pulse_pin, int ctrl_pin) {
   pcnt_config_t pcnt_config = {};
   pcnt_config.pulse_gpio_num = pulse_pin;
@@ -148,16 +143,15 @@ void setup_pcnt(pcnt_unit_t unit, int pulse_pin, int ctrl_pin) {
   pcnt_config_ch1.channel = PCNT_CHANNEL_1;
   pcnt_unit_config(&pcnt_config_ch1);
 
-  pcnt_set_filter_value(unit, 200); 
+  pcnt_set_filter_value(unit, 1500); 
   pcnt_filter_enable(unit);
   pcnt_counter_clear(unit);
 }
 
-// 🔴 修正：PCNT返回值判断错误（致命错误修复）
 long read_pcnt_left() {
   static int16_t last_val = 0;
   int16_t count = 0;
-  if (pcnt_get_counter_value(PCNT_UNIT_0, &count) != ESP_OK) return 0; // 修正：ESP_OK 替代 ESP32
+  if (pcnt_get_counter_value(PCNT_UNIT_0, &count) != ESP_OK) return 0;
   int32_t diff = (int32_t)count - (int32_t)last_val;
   if (diff > 32767) diff -= 65536;
   else if (diff < -32768) diff += 65536;
@@ -165,11 +159,10 @@ long read_pcnt_left() {
   return diff;
 }
 
-// 🔴 修正：PCNT返回值判断错误（致命错误修复）
 long read_pcnt_right() {
   static int16_t last_val = 0;
   int16_t count = 0;
-  if (pcnt_get_counter_value(PCNT_UNIT_1, &count) != ESP_OK) return 0; // 修正：ESP_OK 替代 ESP32
+  if (pcnt_get_counter_value(PCNT_UNIT_1, &count) != ESP_OK) return 0;
   int32_t diff = (int32_t)count - (int32_t)last_val;
   if (diff > 32767) diff -= 65536;
   else if (diff < -32768) diff += 65536;
@@ -177,18 +170,13 @@ long read_pcnt_right() {
   return diff;
 }
 
-// ============================================================
-// 5. 电机控制与 PID
-// ============================================================
 void setup_motors() {
   pinMode(PIN_L_IN1, OUTPUT); pinMode(PIN_L_IN2, OUTPUT);
   pinMode(PIN_R_IN1, OUTPUT); pinMode(PIN_R_IN2, OUTPUT);
   pinMode(PIN_STBY, OUTPUT);
   digitalWrite(PIN_STBY, HIGH); 
-  ledcSetup(LEDC_CH_L_PWM, LEDC_FREQ, LEDC_RES);
-  ledcSetup(LEDC_CH_R_PWM, LEDC_FREQ, LEDC_RES);
-  ledcAttachPin(PIN_L_PWM, LEDC_CH_L_PWM);
-  ledcAttachPin(PIN_R_PWM, LEDC_CH_R_PWM);
+  ledcAttach(PIN_L_PWM, LEDC_FREQ, LEDC_RES);
+  ledcAttach(PIN_R_PWM, LEDC_FREQ, LEDC_RES);
 }
 
 float apply_deadzone_ff(float pid_output) {
@@ -206,12 +194,12 @@ void set_motor_raw(float left_f, float right_f) {
   if (stall_fault_r) right_f = 0;
   int16_t left = (int16_t)left_f;
   int16_t right = (int16_t)right_f;
-  if (left > 0) { digitalWrite(PIN_L_IN1, HIGH); digitalWrite(PIN_L_IN2, LOW); ledcWrite(LEDC_CH_L_PWM, left); } 
-  else if (left < 0) { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, HIGH); ledcWrite(LEDC_CH_L_PWM, -left); } 
-  else { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, LOW); ledcWrite(LEDC_CH_L_PWM, 0); }
-  if (right > 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(LEDC_CH_R_PWM, right); } 
-  else if (right < 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(LEDC_CH_R_PWM, -right); } 
-  else { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, LOW); ledcWrite(LEDC_CH_R_PWM, 0); }
+  if (left > 0) { digitalWrite(PIN_L_IN1, HIGH); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, left); } 
+  else if (left < 0) { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, HIGH); ledcWrite(PIN_L_PWM, -left); } 
+  else { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, 0); }
+  if (right > 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, right); } 
+  else if (right < 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(PIN_R_PWM, -right); } 
+  else { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, 0); }
 }
 
 float pid_compute(PIDState &s, float setpoint, float measurement, float dt) {
@@ -237,91 +225,152 @@ float pid_compute(PIDState &s, float setpoint, float measurement, float dt) {
 
 void pid_reset(PIDState &s) { s.integral = 0; s.prev_measurement = 0; s.initialized = false; }
 
-// ============================================================
-// 6. MPU6050 配置与读取
-// ============================================================
-#define MPU6050_ADDR 0x68
+int i2c_fail_count = 0;
+
 void recover_i2c() {
-  Wire.end(); 
-  pinMode(I2C_SCL, OUTPUT_OPEN_DRAIN); pinMode(I2C_SDA, OUTPUT_OPEN_DRAIN);
-  for (int i = 0; i < 9; i++) { digitalWrite(I2C_SCL, HIGH); delayMicroseconds(5); digitalWrite(I2C_SCL, LOW); delayMicroseconds(5); }
+  set_motor_raw(0, 0);
+  pid_reset(pid_left);
+  pid_reset(pid_right);
+  Wire.end();
+  pinMode(I2C_SCL, OUTPUT_OPEN_DRAIN);
+  pinMode(I2C_SDA, INPUT_PULLUP);
+  for (int i = 0; i < 9; i++) {
+    digitalWrite(I2C_SCL, LOW); delayMicroseconds(5);
+    digitalWrite(I2C_SCL, HIGH); delayMicroseconds(5);
+  }
+  pinMode(I2C_SDA, OUTPUT_OPEN_DRAIN);
+  digitalWrite(I2C_SDA, LOW); delayMicroseconds(5);
+  digitalWrite(I2C_SCL, HIGH); delayMicroseconds(5);
   digitalWrite(I2C_SDA, HIGH); delayMicroseconds(10);
-  pinMode(I2C_SDA, INPUT_PULLUP); pinMode(I2C_SCL, INPUT_PULLUP);
+  Wire.begin(I2C_SDA, I2C_SCL, 400000);
+  setup_imu();
+  nh.logwarn("I2C bus recovered, IMU reinitialized");
 }
+
 void setup_imu() {
+  Wire.setTimeOut(20);
+  Wire.beginTransmission(MPU6050_ADDR);
+  if (Wire.endTransmission() != 0) {
+    imu_healthy = false;
+    return;
+  }
+  imu_healthy = true;
   Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x6B); Wire.write(0x00); Wire.endTransmission();
   Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1A); Wire.write(0x03); Wire.endTransmission();
   Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1B); Wire.write(0x08); Wire.endTransmission();
   Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1C); Wire.write(0x08); Wire.endTransmission();
 }
-void calibrate_gyro() {
-  // 陀螺仪零偏校准：静止时采样 200 次取平均
+
+void calibrate_imu() {
+  if (!imu_healthy) return;
+  nh.logwarn("Calibrating IMU, keep robot still...");
   float sx = 0, sy = 0, sz = 0;
-  for (int i = 0; i < IMU_CALIB_SAMPLES; i++) {
-    Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x3B); Wire.endTransmission(false);
-    if (Wire.requestFrom((uint8_t)MPU6050_ADDR, (uint8_t)14) < 14) { i--; delay(5); continue; }
-    Wire.read(); Wire.read(); Wire.read(); Wire.read(); Wire.read(); Wire.read(); // 跳过加速度
-    Wire.read(); Wire.read(); // 跳过温度
-    int16_t gx = (Wire.read() << 8) | Wire.read();
-    int16_t gy = (Wire.read() << 8) | Wire.read();
-    int16_t gz = (Wire.read() << 8) | Wire.read();
-    sx += gx / 65.5f * (M_PI / 180.0f);
-    sy += gy / 65.5f * (M_PI / 180.0f);
-    sz += gz / 65.5f * (M_PI / 180.0f);
+  int valid = 0;
+  for (int i = 0; i < CALIB_SAMPLES; i++) {
+    Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x43); Wire.endTransmission(false);
+    if (Wire.requestFrom((uint8_t)MPU6050_ADDR, (uint8_t)6) >= 6) {
+      int16_t gx_raw = (Wire.read() << 8) | Wire.read();
+      int16_t gy_raw = (Wire.read() << 8) | Wire.read();
+      int16_t gz_raw = (Wire.read() << 8) | Wire.read();
+      sx += gx_raw / 65.5f * (M_PI / 180.0f);
+      sy += gy_raw / 65.5f * (M_PI / 180.0f);
+      sz += gz_raw / 65.5f * (M_PI / 180.0f);
+      valid++;
+    }
     delay(5);
   }
-  gyro_bias_x = sx / IMU_CALIB_SAMPLES;
-  gyro_bias_y = sy / IMU_CALIB_SAMPLES;
-  gyro_bias_z = sz / IMU_CALIB_SAMPLES;
-  imu_calibrated = true;
+  if (valid > 0) {
+    gbias_x = sx / valid;
+    gbias_y = sy / valid;
+    gbias_z = sz / valid;
+    nh.loginfo("Gyro bias calibration done.");
+
+    float mag_sum = 0;
+    int accel_valid = 0;
+    float axs = 0, ays = 0, azs = 0;
+    for (int i = 0; i < 100; i++) {
+      Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x3B); Wire.endTransmission(false);
+      if (Wire.requestFrom((uint8_t)MPU6050_ADDR, (uint8_t)6) >= 6) {
+        int16_t ax = (Wire.read() << 8) | Wire.read();
+        int16_t ay = (Wire.read() << 8) | Wire.read();
+        int16_t az = (Wire.read() << 8) | Wire.read();
+        axs += ax; ays += ay; azs += az;
+        mag_sum += sqrt(ax*ax + ay*ay + az*az) / 8192.0f * 9.81f;
+        accel_valid++;
+      }
+      delay(5);
+    }
+    if (accel_valid > 20) {
+      accel_scale = 9.81f / (mag_sum / accel_valid);
+      abias_x = axs / accel_valid;
+      abias_y = ays / accel_valid;
+      abias_z = azs / accel_valid - 8192;
+      nh.loginfo("Accel calibration done.");
+    } else {
+      nh.logwarn("Accel calibration skipped (noisy).");
+    }
+
+    imu_calibrated = true;
+    read_imu();
+    if (imu_data_valid) {
+      cf_roll = atan2(-imu_ay, -imu_az);
+      cf_pitch = atan2(imu_ax, sqrt(imu_ay * imu_ay + imu_az * imu_az));
+    }
+  } else {
+    nh.logerror("IMU Calibration failed! IMU disabled.");
+    imu_healthy = false;
+  }
 }
 
 void read_imu() {
+  if (!imu_healthy) { imu_data_valid = false; return; }
   Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x3B); Wire.endTransmission(false);
-  Wire.setTimeOut(2000); 
   uint8_t bytes_received = Wire.requestFrom((uint8_t)MPU6050_ADDR, (uint8_t)14);
+  
   if (bytes_received < 14) {
-    imu_data_valid = false; imu_timeout_count++;
-    if (imu_timeout_count >= 3) { recover_i2c(); Wire.begin(I2C_SDA, I2C_SCL, 400000); setup_imu(); imu_timeout_count = 0; }
+    imu_data_valid = false;
+    i2c_fail_count++;
+    if (i2c_fail_count > 20) {
+      i2c_fail_count = 0;
+      recover_i2c();
+    }
     return; 
   }
-  imu_timeout_count = 0; 
+  
+  i2c_fail_count = 0;
+
   int16_t ax_raw = (Wire.read() << 8) | Wire.read();
   int16_t ay_raw = (Wire.read() << 8) | Wire.read();
   int16_t az_raw = (Wire.read() << 8) | Wire.read();
-  Wire.read(); Wire.read(); 
+  Wire.read(); Wire.read();
   int16_t gx_raw = (Wire.read() << 8) | Wire.read();
   int16_t gy_raw = (Wire.read() << 8) | Wire.read();
   int16_t gz_raw = (Wire.read() << 8) | Wire.read();
-  float rax = ax_raw / 8192.0f * 9.81f, ray = ay_raw / 8192.0f * 9.81f, raz = az_raw / 8192.0f * 9.81f;
-  float rgx = gx_raw / 65.5f * (M_PI / 180.0f), rgy = gy_raw / 65.5f * (M_PI / 180.0f), rgz = gz_raw / 65.5f * (M_PI / 180.0f);
 
-  // 低通 IIR 滤波 + 陀螺仪零偏补偿
+  float rax = (ax_raw - abias_x) / 8192.0f * 9.81f * accel_scale;
+  float ray = (ay_raw - abias_y) / 8192.0f * 9.81f * accel_scale;
+  float raz = (az_raw - abias_z) / 8192.0f * 9.81f * accel_scale;
+  float rgx = gx_raw / 65.5f * (M_PI / 180.0f);
+  float rgy = gy_raw / 65.5f * (M_PI / 180.0f);
+  float rgz = gz_raw / 65.5f * (M_PI / 180.0f);
+
   if (!imu_calibrated) {
-    imu_ax_f = rax; imu_ay_f = ray; imu_az_f = raz;
-    imu_gx_f = rgx; imu_gy_f = rgy; imu_gz_f = rgz;
+    imu_ax = rax; imu_ay = ray; imu_az = raz;
+    imu_gx = rgx; imu_gy = rgy; imu_gz = rgz;
   } else {
-    imu_ax_f = IMU_LP_ALPHA * rax + (1.0f - IMU_LP_ALPHA) * imu_ax_f;
-    imu_ay_f = IMU_LP_ALPHA * ray + (1.0f - IMU_LP_ALPHA) * imu_ay_f;
-    imu_az_f = IMU_LP_ALPHA * raz + (1.0f - IMU_LP_ALPHA) * imu_az_f;
-    imu_gx_f = IMU_LP_ALPHA * (rgx - gyro_bias_x) + (1.0f - IMU_LP_ALPHA) * imu_gx_f;
-    imu_gy_f = IMU_LP_ALPHA * (rgy - gyro_bias_y) + (1.0f - IMU_LP_ALPHA) * imu_gy_f;
-    imu_gz_f = IMU_LP_ALPHA * (rgz - gyro_bias_z) + (1.0f - IMU_LP_ALPHA) * imu_gz_f;
+    imu_ax = IMU_LP_ALPHA * rax + (1.0f - IMU_LP_ALPHA) * imu_ax;
+    imu_ay = IMU_LP_ALPHA * ray + (1.0f - IMU_LP_ALPHA) * imu_ay;
+    imu_az = IMU_LP_ALPHA * raz + (1.0f - IMU_LP_ALPHA) * imu_az;
+    imu_gx = IMU_LP_ALPHA * (rgx - gbias_x) + (1.0f - IMU_LP_ALPHA) * imu_gx;
+    imu_gy = IMU_LP_ALPHA * (rgy - gbias_y) + (1.0f - IMU_LP_ALPHA) * imu_gy;
+    imu_gz = IMU_LP_ALPHA * (rgz - gbias_z) + (1.0f - IMU_LP_ALPHA) * imu_gz;
   }
-
-  // 从加速度计估计 roll/pitch（静止平放时稳定）
-  roll_est = atan2(-imu_ay_f, -imu_az_f);
-  pitch_est = atan2(imu_ax_f, sqrt(imu_ay_f * imu_ay_f + imu_az_f * imu_az_f));
-
-  imu_ax = imu_ax_f; imu_ay = imu_ay_f; imu_az = imu_az_f;
-  imu_gx = imu_gx_f; imu_gy = imu_gy_f; imu_gz = imu_gz_f;
+  
   imu_data_valid = true; 
 }
 
-// ============================================================
-// 7. ROS 回调函数 (订阅 cmd_vel)
-// ============================================================
 void cmdVelCallback(const geometry_msgs::Twist& msg) {
+  digitalWrite(PIN_STBY, HIGH);
   float v = msg.linear.x;
   float w = msg.angular.z;
   
@@ -336,14 +385,11 @@ void cmdVelCallback(const geometry_msgs::Twist& msg) {
   
   last_cmd_time = millis();
   
-  if (stall_fault_l) { stall_fault_l = false; stall_timer_start_l = 0; pid_reset(pid_left); }
-  if (stall_fault_r) { stall_fault_r = false; stall_timer_start_r = 0; pid_reset(pid_right); }
+  if (stall_fault_l && fabs(target_rpm_left) < 1.0f) { stall_fault_l = false; stall_timer_start_l = 0; pid_reset(pid_left); }
+  if (stall_fault_r && fabs(target_rpm_right) < 1.0f) { stall_fault_r = false; stall_timer_start_r = 0; pid_reset(pid_right); }
 }
 ros::Subscriber<geometry_msgs::Twist> sub_cmd("cmd_vel", &cmdVelCallback);
 
-// ============================================================
-// 8. 初始化与主循环 
-// ============================================================
 void setup() {
   Serial.setRxBufferSize(1024);
   Serial.setTxBufferSize(1024);
@@ -358,27 +404,25 @@ void setup() {
   setup_motors();
   Wire.begin(I2C_SDA, I2C_SCL, 400000);
   setup_imu();
-  calibrate_gyro();  // 静止 1 秒标定陀螺零偏
+  for (int i = 0; i < 10; i++) { read_imu(); delay(10); }
   
   pid_left  = {1.5f, 0.3f, 0.05f, 0, 0, false};
   pid_right = {1.5f, 0.3f, 0.05f, 0, 0, false}; 
   
-  // 硬件看门狗：主循环卡死 5 秒后自动重启 ESP32
-  esp_task_wdt_init(5, true);
-  esp_task_wdt_add(NULL);
-
   nh.initNode();
   nh.advertise(pub_odom);
   nh.advertise(pub_imu);
   nh.subscribe(sub_cmd);
+  
+  delay(500);
+  calibrate_imu();
+  for (int i = 0; i < 50; i++) { read_imu(); delay(5); }
   
   last_loop_us = esp_timer_get_time();
   prev_exec_us = last_loop_us;
 }
 
 void loop() {
-  esp_task_wdt_reset();  // 喂硬件看门狗
-
   int64_t now = esp_timer_get_time();
   if (now - last_loop_us < LOOP_INTERVAL_US) {
     nh.spinOnce(); 
@@ -399,26 +443,26 @@ void loop() {
     target_rpm_right = 0;
     target_rpm_left_filtered = 0;
     target_rpm_right_filtered = 0;
+    digitalWrite(PIN_STBY, LOW);
+    pid_reset(pid_left); pid_reset(pid_right);
+    stall_fault_l = false; stall_timer_start_l = 0;
+    stall_fault_r = false; stall_timer_start_r = 0;
   }
 
-  long delta_l_raw = read_pcnt_left();
-  long delta_r_raw = read_pcnt_right();
+  float delta_l = read_pcnt_left() * ENC_LEFT_DIR;
+  float delta_r = read_pcnt_right() * ENC_RIGHT_DIR;
 
-  // 🛠️ 核心修复：统一应用方向修正宏
-  float delta_l = delta_l_raw * ENC_LEFT_DIR;
-  float delta_r = delta_r_raw * ENC_RIGHT_DIR;
-
-  // 里程计积分计算
   float dist_left = delta_l * METERS_PER_TICK;
   float dist_right = delta_r * METERS_PER_TICK;
   float dist_center = (dist_left + dist_right) / 2.0;
+  float delta_theta = (dist_right - dist_left) / WHEEL_BASE;
   
-  odom_theta += (dist_right - dist_left) / WHEEL_BASE;
-  odom_x += dist_center * cos(odom_theta);
-  odom_y += dist_center * sin(odom_theta);
+  odom_x += dist_center * cos(odom_theta + delta_theta * 0.5f);
+  odom_y += dist_center * sin(odom_theta + delta_theta * 0.5f);
+  odom_theta += delta_theta;
+  odom_theta = normalize_angle(odom_theta);
 
   if (dt_valid) {
-    // 转速计算
     float raw_rpm_left  = (delta_l / ENCODER_TICKS_PER_REV) * (60.0f / dt) / GEAR_RATIO;
     float raw_rpm_right = (delta_r / ENCODER_TICKS_PER_REV) * (60.0f / dt) / GEAR_RATIO;
     
@@ -432,12 +476,18 @@ void loop() {
     if (fabs(target_rpm_left_filtered) > 0.01f || fabs(target_rpm_right_filtered) > 0.01f || 
         fabs(actual_rpm_left) > RPM_STOP_THRESHOLD || fabs(actual_rpm_right) > RPM_STOP_THRESHOLD) {
       
-      float pwm_left  = pid_compute(pid_left,  target_rpm_left_filtered,  actual_rpm_left,  dt);
-      float pwm_right = pid_compute(pid_right, target_rpm_right_filtered, actual_rpm_right, dt);
-      pwm_left = apply_deadzone_ff(pwm_left);
-      pwm_right = apply_deadzone_ff(pwm_right);
+      float pwm_left = 0, pwm_right = 0;
+      if (!stall_fault_l) {
+        pwm_left = pid_compute(pid_left, target_rpm_left_filtered, actual_rpm_left, dt);
+        pwm_left = apply_deadzone_ff(pwm_left);
+      }
+      if (!stall_fault_r) {
+        pwm_right = pid_compute(pid_right, target_rpm_right_filtered, actual_rpm_right, dt);
+        pwm_right = apply_deadzone_ff(pwm_right);
+      }
 
-      if (fabs(pwm_left) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_left) < STALL_DETECT_RPM_THRESH) {
+      if (fabs(pwm_left) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_left) < STALL_DETECT_RPM_THRESH
+          && fabs(target_rpm_left_filtered) > 20.0f) {
         if (stall_timer_start_l == 0) stall_timer_start_l = millis();
         else if (millis() - stall_timer_start_l > STALL_DETECT_TIME_MS) {
           if (!stall_fault_l) { 
@@ -448,7 +498,8 @@ void loop() {
         }
       } else { stall_timer_start_l = 0; }
       
-      if (fabs(pwm_right) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_right) < STALL_DETECT_RPM_THRESH) {
+      if (fabs(pwm_right) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_right) < STALL_DETECT_RPM_THRESH
+          && fabs(target_rpm_right_filtered) > 20.0f) {
         if (stall_timer_start_r == 0) stall_timer_start_r = millis();
         else if (millis() - stall_timer_start_r > STALL_DETECT_TIME_MS) {
           if (!stall_fault_r) { 
@@ -466,6 +517,22 @@ void loop() {
     }
   } else {
     set_motor_raw(0, 0);
+    pid_reset(pid_left);
+    pid_reset(pid_right);
+  }
+
+  if (imu_data_valid && imu_calibrated) {
+    float gx = fabs(imu_gx) > GYRO_DEADBAND ? imu_gx : 0;
+    float gy = fabs(imu_gy) > GYRO_DEADBAND ? imu_gy : 0;
+    float gz = fabs(imu_gz) > GYRO_DEADBAND ? imu_gz : 0;
+    float accel_roll = atan2(-imu_ay, -imu_az);
+    float accel_pitch = atan2(imu_ax, sqrt(imu_ay * imu_ay + imu_az * imu_az));
+    if (dt_valid) {
+      cf_roll = COMP_GAIN * (cf_roll + gx * dt) + (1.0f - COMP_GAIN) * accel_roll;
+      cf_pitch = COMP_GAIN * (cf_pitch + gy * dt) + (1.0f - COMP_GAIN) * accel_pitch;
+      cf_yaw += gz * dt;
+      cf_yaw = normalize_angle(cf_yaw);
+    }
   }
 
   float vx = 0, vth = 0;
@@ -495,40 +562,36 @@ void loop() {
   if (imu_data_valid) {
     imu_msg.header.stamp = nh.now();
     imu_msg.header.frame_id = "imu_link";
+    imu_msg.linear_acceleration.x = imu_ax;
+    imu_msg.linear_acceleration.y = imu_ay;
+    imu_msg.linear_acceleration.z = imu_az;
+    imu_msg.angular_velocity.x = imu_gx;
+    imu_msg.angular_velocity.y = imu_gy;
+    imu_msg.angular_velocity.z = imu_gz;
 
-    // 使用低通滤波 + 零偏补偿后的值
-    imu_msg.linear_acceleration.x = imu_ax_f;
-    imu_msg.linear_acceleration.y = imu_ay_f;
-    imu_msg.linear_acceleration.z = imu_az_f;
-    imu_msg.angular_velocity.x = imu_gx_f;
-    imu_msg.angular_velocity.y = imu_gy_f;
-    imu_msg.angular_velocity.z = imu_gz_f;
+    float half_roll = cf_roll * 0.5f;
+    float half_pitch = cf_pitch * 0.5f;
+    float half_yaw = cf_yaw * 0.5f;
+    float cr = cos(half_roll), sr = sin(half_roll);
+    float cp = cos(half_pitch), sp = sin(half_pitch);
+    float cy = cos(half_yaw), sy = sin(half_yaw);
+    imu_msg.orientation.x = sr * cp * cy - cr * sp * sy;
+    imu_msg.orientation.y = cr * sp * cy + sr * cp * sy;
+    imu_msg.orientation.z = cr * cp * sy - sr * sp * cy;
+    imu_msg.orientation.w = cr * cp * cy + sr * sp * sy;
 
-    // 从加速度计估计的姿态（静止平放时稳定，运动时会跟随但不精确）
-    float cp = cos(pitch_est * 0.5f), sp = sin(pitch_est * 0.5f);
-    float cr = cos(roll_est  * 0.5f), sr = sin(roll_est  * 0.5f);
-    imu_msg.orientation.x = sr * cp;
-    imu_msg.orientation.y = sp * cr;
-    imu_msg.orientation.z = 0;
-    imu_msg.orientation.w = cr * cp;
-
-    // 加速度协方差（滤波后更小）
     for (int i = 0; i < 9; i++) imu_msg.linear_acceleration_covariance[i] = 0.0;
-    imu_msg.linear_acceleration_covariance[0] = 0.005;
-    imu_msg.linear_acceleration_covariance[4] = 0.005;
-    imu_msg.linear_acceleration_covariance[8] = 0.005;
-
-    // 角速度协方差（滤波后更小）
+    imu_msg.linear_acceleration_covariance[0] = 0.01; 
+    imu_msg.linear_acceleration_covariance[4] = 0.01; 
+    imu_msg.linear_acceleration_covariance[8] = 0.01; 
     for (int i = 0; i < 9; i++) imu_msg.angular_velocity_covariance[i] = 0.0;
-    imu_msg.angular_velocity_covariance[0] = 0.005;
-    imu_msg.angular_velocity_covariance[4] = 0.005;
-    imu_msg.angular_velocity_covariance[8] = 0.005;
-
-    // 姿态协方差（提供 roll/pitch，yaw 不可观测）
+    imu_msg.angular_velocity_covariance[0] = 0.01; 
+    imu_msg.angular_velocity_covariance[4] = 0.01; 
+    imu_msg.angular_velocity_covariance[8] = 0.01; 
     for (int i = 0; i < 9; i++) imu_msg.orientation_covariance[i] = 0.0;
-    imu_msg.orientation_covariance[0] = 0.005;  // roll 方差
-    imu_msg.orientation_covariance[4] = 0.005;  // pitch 方差
-    imu_msg.orientation_covariance[8] = -1.0;    // yaw 不提供
+    imu_msg.orientation_covariance[0] = 0.05;
+    imu_msg.orientation_covariance[4] = 0.05;
+    imu_msg.orientation_covariance[8] = 100.0;
   }
 
   if (loop_count % 2 == 0) {
