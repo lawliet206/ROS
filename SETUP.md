@@ -7,13 +7,15 @@ PC (ROS Master) ←WiFi→ J1900 (车载) ←USB→ ESP32
                      │                   ├─ PWM → TB6612FNG → 左/右电机
                      │                   ├─ 中断 ← 编码器 (JGB37-520)
                      │                   └─ I2C  ← MPU6050 IMU
-                     └─ USB ← 激光雷达 (S9-FSRD / YDLIDAR F2)
+                     ├─ USB ← 激光雷达 (S9-FSRD / YDLIDAR F2)
+                     └─ USB ← 毫米波雷达 (HLK-LD2402, 24GHz, 115200)
 ```
 
 - **PC**：Ubuntu 20.04，跑 SLAM/导航/跟随算法，ROS Master
 - **J1900**：车载迷你主机（Intel Celeron J1900, x86_64），Ubuntu 20.04，跑 rosserial + 激光雷达
 - **ESP32**：下位机（PCNT硬件编码器 + PID + IMU），直发 ROS 里程计/IMU 消息
 - **激光雷达**：S9-FSRD-V1.0 RX（扫地机拆机，AA55 协议，115200，~69Hz/39点/帧）
+- **毫米波雷达**：HLK-LD2402，24GHz，UART 115200，±60° 探测角，最远 10m，接 J1900 USB（不接 ESP32）
 
 ---
 
@@ -244,6 +246,18 @@ bash ~/ROS/src/robot_sim/scripts/sim_follow.sh
 | SCL | GPIO 22 | I2C 时钟（内部上拉） |
 | AD0 | GND | I2C 地址 = 0x68 |
 
+**HLK-LD2402 毫米波雷达（接 J1900，不接 ESP32）：**
+
+| LD2402 | USB-UART 模块 | 说明 |
+|--------|--------------|------|
+| VCC | 3.3V | 供电 |
+| GND | GND | 共地 |
+| TX | RX | 数据输出到 PC |
+| RX | TX | 可不接（仅配置用） |
+
+> LD2402 初始化约需 30-60 秒，上电后等一会才有数据。
+> 默认波特率 115200 8N1，输出二进制帧和 ASCII 距离数据。
+
 **电池电压检测：**
 
 电池 12V 正极 → 10kΩ ──┬── GPIO 34
@@ -265,7 +279,7 @@ sudo udevadm control --reload-rules
 ### 每次开机确认
 
 ```bash
-ls /dev/ttyUSB*   # ESP32 → ttyUSB0, 雷达 → ttyUSB1
+ls /dev/ttyUSB*   # ESP32 → ttyUSB0, 激光雷达 → ttyUSB1, LD2402 → ttyUSB2
 ```
 
 ---
@@ -349,14 +363,26 @@ rosrun robot_bringup send_goals.py _goal_file:=~/maps/nav_goals.yaml
 
 ### 场景 C：人体跟随
 
+**方案一：激光雷达跟随（需 S9-FSRD 雷达）**
+
 | # | 在哪 | 终端 | 命令 |
 |---|------|------|------|
 | 1 | **PC** | 终端1 | `source ~/ROS/devel/setup.bash && roscore` |
 | 2 | **J1900** | SSH终端1 | `source ~/ROS/devel/setup.bash && rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
 | 3 | **J1900** | SSH终端2 | `source ~/ROS/devel/setup.bash && rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
-| 4 | **PC** | 终端2 | `source ~/ROS/devel/setup.bash && roslaunch robot_bringup follow.launch start_lidar:=false` |
+| 4 | **PC** | 终端2 | `source ~/ROS/devel/setup.bash && roslaunch robot_bringup follow.launch sensor:=laser` |
 
-人在车前走，车自动跟。
+**方案二：毫米波雷达跟随（LD2402，不依赖激光雷达）**
+
+| # | 在哪 | 终端 | 命令 |
+|---|------|------|------|
+| 1 | **PC** | 终端1 | `source ~/ROS/devel/setup.bash && roscore` |
+| 2 | **J1900** | SSH终端1 | `source ~/ROS/devel/setup.bash && rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
+| 3 | **J1900** | SSH终端2 | `source ~/ROS/devel/setup.bash && roslaunch robot_bringup follow.launch sensor:=radar radar_port:=/dev/ttyUSB2` |
+
+人站在 LD2402 前（±60° 扇区），车自动跟进/后退保持设定距离。
+
+> 注意：单雷达只能测距不能测角，机器人只能前进/后退，无法转向。被测目标移出扇区后会停止等待。
 
 ---
 
@@ -385,7 +411,8 @@ rosrun robot_bringup send_goals.py _goal_file:=~/maps/nav_goals.yaml
 | 4 | PC | `bash ~/ROS/src/robot_bringup/scripts/save_map.sh my_map` | 保存地图 |
 | 5 | PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/my_map.yaml` | 导航 |
 | 6 | PC | `source ~/ROS/devel/setup.bash && rosrun robot_bringup send_goals.py _goals:="[(x,y,yaw),...]"` | 自动巡点 |
-| 7 | PC | `source ~/ROS/devel/setup.bash && roslaunch robot_bringup follow.launch start_lidar:=false` | 人体跟随 |
+| 7a | PC | `source ~/ROS/devel/setup.bash && roslaunch robot_bringup follow.launch sensor:=laser` | 激光雷达跟随 |
+| 7b | PC | `source ~/ROS/devel/setup.bash && roslaunch robot_bringup follow.launch sensor:=radar radar_port:=/dev/ttyUSB2` | 毫米波雷达跟随 |
 
 ---
 

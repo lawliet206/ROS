@@ -41,15 +41,15 @@
 //   4. 再验证转向：原地旋转 90°，/odom orientation.z 应正确累积
 //   5. 最后验证左右轮差速方向是否一致，若两轮转速相反则取反一侧
 #define ENC_LEFT_DIR       1
-#define ENC_RIGHT_DIR      1
+#define ENC_RIGHT_DIR      -1
 
-#define MAX_RAMP_RPM_PER_SEC  800.0f  
+#define MAX_RAMP_RPM_PER_SEC  300.0f  
 #define RPM_FILTER_ALPHA      0.3f    
 #define RPM_STOP_THRESHOLD    1.0f    
 #define PID_INTEGRAL_LIMIT    500.0f  
-#define MAX_CMD_RPM           800.0f  
+#define MAX_CMD_RPM           600.0f  
 #define MIN_START_PWM         150.0f  
-#define PID_OUTPUT_LIMIT      900.0f  
+#define PID_OUTPUT_LIMIT      1023.0f 
 
 #define LOOP_INTERVAL_US  10000
 #define WATCHDOG_TIMEOUT  500
@@ -143,7 +143,7 @@ void setup_pcnt(pcnt_unit_t unit, int pulse_pin, int ctrl_pin) {
   pcnt_config_ch1.channel = PCNT_CHANNEL_1;
   pcnt_unit_config(&pcnt_config_ch1);
 
-  pcnt_set_filter_value(unit, 1500); 
+  pcnt_set_filter_value(unit, 250); 
   pcnt_filter_enable(unit);
   pcnt_counter_clear(unit);
 }
@@ -194,8 +194,8 @@ void set_motor_raw(float left_f, float right_f) {
   if (stall_fault_r) right_f = 0;
   int16_t left = (int16_t)left_f;
   int16_t right = (int16_t)right_f;
-  if (left > 0) { digitalWrite(PIN_L_IN1, HIGH); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, left); } 
-  else if (left < 0) { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, HIGH); ledcWrite(PIN_L_PWM, -left); } 
+  if (left > 0) { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, HIGH); ledcWrite(PIN_L_PWM, left); } 
+  else if (left < 0) { digitalWrite(PIN_L_IN1, HIGH); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, -left); } 
   else { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, 0); }
   if (right > 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, right); } 
   else if (right < 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(PIN_R_PWM, -right); } 

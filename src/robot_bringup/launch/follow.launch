@@ -1,48 +1,59 @@
 <!--
   follow.launch — 人体跟随 (一键启动)
   =====================================
-  功能: 纯激光雷达人体跟随
+  功能: 激光雷达 / 毫米波雷达人体跟随
 
   使用:
-    roslaunch robot_bringup follow.launch
+    roslaunch robot_bringup follow.launch              # 激光跟随 (默认)
+    roslaunch robot_bringup follow.launch sensor:=radar # LD2402 雷达跟随
 
   跟随节点直接发布 /cmd_vel 控制底盘.
-  如需多源切换, 可安装 cmd_vel_mux.
 -->
 
 <launch>
 
   <!-- ===== 参数 ===== -->
+  <arg name="sensor"     default="laser" />  <!-- laser 或 radar -->
   <arg name="lidar_model" default="s9_fsrd" />
   <arg name="lidar_port"  default="/dev/ttyUSB1" />
-  <arg name="start_lidar" default="true" />  <!-- 实物部署时设 false -->
-  <arg name="follow_dist" default="1.0" />     <!-- 跟随距离 (m) -->
-  <arg name="max_speed"   default="0.5" />     <!-- 最大速度 (m/s) -->
+  <arg name="start_lidar" default="true" />
+  <arg name="radar_port"  default="/dev/ttyUSB2" />
+  <arg name="follow_dist" default="1.0" />
+  <arg name="max_speed"   default="0.5" />
 
   <!-- ============================================================ -->
-  <!-- 1. 基础启动 (URDF + 雷达)                                     -->
+  <!-- 1. 基础启动 (URDF + 激光雷达, 仅 laser 模式)                  -->
   <!-- ============================================================ -->
-  <include file="$(find robot_bringup)/launch/bringup.launch">
-    <arg name="lidar_model"  value="$(arg lidar_model)" />
-    <arg name="lidar_port"   value="$(arg lidar_port)" />
-    <arg name="start_lidar"  value="$(arg start_lidar)" />
-  </include>
+  <group if="$(eval arg('sensor') == 'laser')">
+    <include file="$(find robot_bringup)/launch/bringup.launch">
+      <arg name="lidar_model"  value="$(arg lidar_model)" />
+      <arg name="lidar_port"   value="$(arg lidar_port)" />
+      <arg name="start_lidar"  value="$(arg start_lidar)" />
+    </include>
+  </group>
 
   <!-- ============================================================ -->
-  <!-- 2. 激光跟随节点                                                 -->
+  <!-- 2. 跟随节点 (根据 sensor 参数切换)                             -->
   <!-- ============================================================ -->
-  <node name="laser_follower" pkg="robot_bringup" type="laser_follower.py"
-        output="screen">
-    <param name="target_dist"  value="$(arg follow_dist)" />
-    <param name="max_linear"   value="$(arg max_speed)" />
-    <param name="max_angular"  value="0.8" />
-    <param name="scan_topic"   value="/scan" />
-  </node>
+  <group if="$(eval arg('sensor') == 'laser')">
+    <node name="follower" pkg="robot_bringup" type="laser_follower.py"
+          output="screen">
+      <param name="target_dist" value="$(arg follow_dist)" />
+      <param name="max_linear"  value="$(arg max_speed)" />
+      <param name="max_angular" value="0.8" />
+    </node>
+  </group>
 
-  <!--
-    跟随节点直接发布 /cmd_vel (无需 relay)
-    如需在遥控/跟随/导航之间切换, 安装 cmd_vel_mux:
-      sudo apt install ros-noetic-cmd-vel-mux
-  -->
+  <group if="$(eval arg('sensor') == 'radar')">
+    <node name="follower" pkg="robot_bringup" type="radar_follower.py"
+          output="screen">
+      <param name="port"         value="$(arg radar_port)" />
+      <param name="target_dist"  value="$(arg follow_dist)" />
+      <param name="max_linear"   value="$(arg max_speed)" />
+      <param name="kp_linear"    value="0.4" />
+      <param name="deadzone"     value="0.2" />
+      <param name="timeout"      value="2.0" />
+    </node>
+  </group>
 
 </launch>
