@@ -224,6 +224,8 @@ ls /dev/ttyUSB*   # USB0=ESP32  USB1=激光雷达  USB2=LD2402
 
 > **⚠️ 每个新终端必须先执行：`source ~/ROS/devel/setup.bash`**
 > 否则 `rosrun`/`roslaunch` 会报 `package not found`。
+>
+> 卡住了？`bash ~/ROS/tools/kill_ros.sh` 一键清理所有 ROS/Gazebo 进程。
 
 ### 6.1 SLAM 建图
 
@@ -358,6 +360,8 @@ rosrun map_server map_saver -f ~/maps/lab_map
 ---
 
 ## 8. 快速参考
+
+> 卡住/报错时先清理残留：`bash ~/ROS/tools/kill_ros.sh`
 
 ### 仿真
 
