@@ -37,6 +37,14 @@
   </include>
 
   <!-- ============================================================ -->
+  <!-- 1.5 odom→base_footprint TF（ROS 必需，ESP32 不发 TF）         -->
+  <!-- ============================================================ -->
+  <node name="ekf_localization" pkg="robot_localization"
+        type="ekf_localization_node" output="screen">
+    <rosparam file="$(find robot_bringup)/config/ekf.yaml" />
+  </node>
+
+  <!-- ============================================================ -->
   <!-- 2. gmapping SLAM                                              -->
   <!-- ============================================================ -->
   <!--

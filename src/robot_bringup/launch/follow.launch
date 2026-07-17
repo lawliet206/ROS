@@ -1,19 +1,17 @@
 <!--
   follow.launch — 人体跟随 (一键启动)
   =====================================
-  功能: 激光雷达 / 毫米波雷达人体跟随
+  功能: 激光 / 毫米波 / 融合 三种模式
 
   使用:
-    roslaunch robot_bringup follow.launch              # 激光跟随 (默认)
-    roslaunch robot_bringup follow.launch sensor:=radar # LD2402 雷达跟随
-
-  跟随节点直接发布 /cmd_vel 控制底盘.
+    roslaunch robot_bringup follow.launch                # 激光跟随 (默认)
+    roslaunch robot_bringup follow.launch sensor:=radar  # LD2402 毫米波跟随
+    roslaunch robot_bringup follow.launch sensor:=fusion # 激光+毫米波融合
 -->
-
 <launch>
 
   <!-- ===== 参数 ===== -->
-  <arg name="sensor"     default="laser" />  <!-- laser 或 radar -->
+  <arg name="sensor"     default="laser" />  <!-- laser / radar / fusion -->
   <arg name="lidar_model" default="s9_fsrd" />
   <arg name="lidar_port"  default="/dev/ttyUSB1" />
   <arg name="start_lidar" default="true" />
@@ -22,9 +20,9 @@
   <arg name="max_speed"   default="0.5" />
 
   <!-- ============================================================ -->
-  <!-- 1. 基础启动 (URDF + 激光雷达, 仅 laser 模式)                  -->
+  <!-- 1. 基础启动 (URDF + 激光雷达)                                  -->
   <!-- ============================================================ -->
-  <group if="$(eval arg('sensor') == 'laser')">
+  <group if="$(eval arg('sensor') in ['laser', 'fusion'])">
     <include file="$(find robot_bringup)/launch/bringup.launch">
       <arg name="lidar_model"  value="$(arg lidar_model)" />
       <arg name="lidar_port"   value="$(arg lidar_port)" />
@@ -33,8 +31,10 @@
   </group>
 
   <!-- ============================================================ -->
-  <!-- 2. 跟随节点 (根据 sensor 参数切换)                             -->
+  <!-- 2. 跟随节点                                                    -->
   <!-- ============================================================ -->
+
+  <!-- 2a. 纯激光跟随 -->
   <group if="$(eval arg('sensor') == 'laser')">
     <node name="follower" pkg="robot_bringup" type="laser_follower.py"
           output="screen">
@@ -44,6 +44,7 @@
     </node>
   </group>
 
+  <!-- 2b. 纯毫米波跟随 -->
   <group if="$(eval arg('sensor') == 'radar')">
     <node name="follower" pkg="robot_bringup" type="radar_follower.py"
           output="screen">
@@ -53,6 +54,25 @@
       <param name="kp_linear"    value="0.4" />
       <param name="deadzone"     value="0.2" />
       <param name="timeout"      value="2.0" />
+    </node>
+  </group>
+
+  <!-- 2c. 激光+毫米波融合跟随 -->
+  <group if="$(eval arg('sensor') == 'fusion')">
+    <!-- LD2402 数据采集 (只发距离话题, 不控车) -->
+    <node name="ld2402_pub" pkg="robot_bringup" type="ld2402_publisher.py"
+          output="screen">
+      <param name="port"    value="$(arg radar_port)" />
+    </node>
+
+    <!-- 融合跟踪 (激光角度 + 雷达距离) -->
+    <node name="follower" pkg="robot_bringup" type="fusion_follower.py"
+          output="screen">
+      <param name="target_dist" value="$(arg follow_dist)" />
+      <param name="max_linear"  value="$(arg max_speed)" />
+      <param name="kp_linear"   value="0.4" />
+      <param name="kp_angular"  value="0.5" />
+      <param name="deadzone"    value="0.2" />
     </node>
   </group>
 

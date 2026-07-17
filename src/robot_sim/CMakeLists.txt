@@ -25,6 +25,12 @@ install(DIRECTORY worlds/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/worlds
 )
 
+# 安装 Python 节点到 lib (rosrun 可找到)
+catkin_install_python(PROGRAMS
+  scripts/sim_radar.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
+
 # 安装 shell 脚本到 share
 install(DIRECTORY scripts/
   DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}/scripts
@@ -32,7 +38,4 @@ install(DIRECTORY scripts/
   FILES_MATCHING PATTERN "*.sh"
 )
 
-# 安装 Python 节点到 lib (rosrun 可找到)
-catkin_install_python(PROGRAMS scripts/wheel_controller.py
-  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
-)
+

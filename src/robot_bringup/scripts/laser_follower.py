@@ -53,8 +53,8 @@ class LaserFollower:
                     points.append((r * math.cos(a), r * math.sin(a)))
 
         if len(points) < self.min_points:
-            if not self.locked:
-                self.cmd_pub.publish(Twist())
+            self.cmd_pub.publish(Twist())
+            self.locked = False
             return
 
         # 聚类：相邻点距离 < cluster_tol 的归为一簇
@@ -73,8 +73,8 @@ class LaserFollower:
             clusters.append(cur)
 
         if not clusters:
-            if not self.locked:
-                self.cmd_pub.publish(Twist())
+            self.cmd_pub.publish(Twist())
+            self.locked = False
             return
 
         # 取最近（距离最小）的簇

@@ -9,6 +9,9 @@ catkin_package()
 catkin_install_python(PROGRAMS
   scripts/s9_lidar_driver.py
   scripts/laser_follower.py
+  scripts/radar_follower.py
+  scripts/fusion_follower.py
+  scripts/ld2402_publisher.py
   scripts/send_goals.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

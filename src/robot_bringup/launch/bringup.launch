@@ -49,7 +49,7 @@
   -->
   <group if="$(arg start_lidar)">
     <!-- YDLIDAR X4 -->
-    <node if="$(eval lidar_model == 'ydlidar_x4')"
+    <node if="$(eval arg('lidar_model') == 'ydlidar_x4')"
           name="ydlidar_node" pkg="ydlidar_ros" type="ydlidar_node"
           output="screen">
       <param name="port"       value="$(arg lidar_port)" />
@@ -61,7 +61,7 @@
     </node>
 
     <!-- YDLIDAR F2 (USB 转 TTL) -->
-    <include if="$(eval lidar_model == 'ydlidar_f2')"
+    <include if="$(eval arg('lidar_model') == 'ydlidar_f2')"
              file="$(find ydlidar_ros)/launch/F2.launch">
       <arg name="port"      value="$(arg lidar_port)" />
       <arg name="baudrate"  value="230400" />
@@ -70,7 +70,7 @@
     </include>
 
     <!-- S9-FSRD-V1.0 (扫地机器人拆机, 115200, AA55协议) -->
-    <node if="$(eval lidar_model == 's9_fsrd')"
+    <node if="$(eval arg('lidar_model') == 's9_fsrd')"
           name="s9_lidar" pkg="robot_bringup" type="s9_lidar_driver.py"
           output="screen">
       <param name="port"      value="$(arg lidar_port)" />
@@ -78,7 +78,7 @@
     </node>
 
     <!-- RPLIDAR -->
-    <node if="$(eval lidar_model == 'rplidar_a1')"
+    <node if="$(eval arg('lidar_model') == 'rplidar_a1')"
           name="rplidar_node" pkg="rplidar_ros" type="rplidarNode"
           output="screen">
       <param name="serial_port"  value="$(arg lidar_port)" />
