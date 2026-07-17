@@ -12,6 +12,7 @@ catkin_install_python(PROGRAMS
   scripts/radar_follower.py
   scripts/fusion_follower.py
   scripts/ld2402_publisher.py
+  scripts/scan_deskew.py
   scripts/send_goals.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )

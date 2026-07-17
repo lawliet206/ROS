@@ -21,7 +21,8 @@
   <!-- ===== 激光雷达参数 ===== -->
   <arg name="lidar_model" default="s9_fsrd" />
   <arg name="lidar_port"  default="/dev/ttyUSB1" />
-  <arg name="start_lidar" default="true" />  <!-- 实物部署时设 false, 雷达在 J1900 上启动 -->
+  <arg name="start_lidar" default="true" />
+  <arg name="deskew"      default="false" />  <!-- IMU 去畸变 -->
 
   <!-- ===== gmapping 参数 ===== -->
   <arg name="map_size"        default="2048" />    <!-- 地图尺寸 (格数) -->
@@ -45,6 +46,18 @@
   </node>
 
   <!-- ============================================================ -->
+  <!-- 1.6 IMU 激光去畸变 (可选)                                      -->
+  <!-- ============================================================ -->
+  <!-- deskew=true:  deskew 节点处理 /scan → 发布 /scan_deskewed     -->
+  <!-- deskew=false: relay 直通 /scan → /scan_deskewed              -->
+  <!-- gmapping 始终订阅 /scan_deskewed                              -->
+  <node if="$(arg deskew)" name="scan_deskew" pkg="robot_bringup"
+        type="scan_deskew.py" output="screen" />
+  <node unless="$(arg deskew)" name="scan_deskew_relay"
+        pkg="topic_tools" type="relay"
+        args="/scan /scan_deskewed" output="log" />
+
+  <!-- ============================================================ -->
   <!-- 2. gmapping SLAM                                              -->
   <!-- ============================================================ -->
   <!--
@@ -58,6 +71,7 @@
   -->
 
   <node name="slam_gmapping" pkg="gmapping" type="slam_gmapping" output="screen">
+    <remap from="scan" to="/scan_deskewed" />
     <!-- 帧设置 -->
     <param name="base_frame"        value="base_footprint" />
     <param name="odom_frame"        value="odom" />

@@ -128,7 +128,7 @@
   <joint name="imu_joint" type="fixed">
     <parent link="base_link"/>
     <child  link="imu_link"/>
-    <origin xyz="0.05 0 0.06"/>
+    <origin xyz="0.05 0 0.06" rpy="0 0 -1.5708"/>  <!-- IMU Y→车头, X→右, Z→上 -->
   </joint>
 
   <!-- base_link → 万向轮 (前方底部) -->

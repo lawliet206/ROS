@@ -22,14 +22,14 @@ odom0_config:
    false, false, true,     # vroll, vpitch, vyaw
    false, false, false]    # ax, ay, az
 
-# --- IMU 输入 ---
+# --- IMU 输入 (MPU6050: Y=车头, X=右, Z=上) ---
 imu0: /imu
 imu0_config:
   [false, false, false,    # x, y, z
    false, false, false,    # roll, pitch, yaw
    false, false, false,    # vx, vy, vz
    false, false, true,     # vroll, vpitch, vyaw
-   true,  false, false]    # ax, ay, az
+    false, true,  false]    # ax, ay, az (ay=车头前进, 因 IMU Y 轴朝前)
 
 # 差分模式下的位姿预测
 differential: false

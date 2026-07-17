@@ -58,6 +58,12 @@ PC (ROS Master) ←WiFi→ J1900 (车载) ←USB→ ESP32
 ### 2.1 PC（一次性）
 
 ```bash
+# 1. 配置 ROS apt 仓库
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
+sudo apt update
+
+# 2. 安装 ROS + 依赖
 sudo apt install ros-noetic-desktop-full
 sudo apt install ros-noetic-gazebo-ros-pkgs ros-noetic-gazebo-ros-control
 sudo apt install ros-noetic-gmapping ros-noetic-move-base ros-noetic-amcl
@@ -68,6 +74,7 @@ sudo apt install ros-noetic-teb-local-planner
 sudo apt install mesa-utils libgl1-mesa-dri libgl1-mesa-glx
 pip3 install pyserial pyyaml
 
+# 3. 编译工作空间
 cd ~/ROS && source /opt/ros/noetic/setup.bash
 catkin_init_workspace src && catkin_make
 source ~/ROS/devel/setup.bash
@@ -77,12 +84,19 @@ echo "source ~/ROS/devel/setup.bash" >> ~/.bashrc
 ### 2.2 J1900（一次性）
 
 ```bash
+# 1. 配置 ROS apt 仓库（同上）
+sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
+curl -s https://raw.githubusercontent.com/ros/rosdistro/master/ros.asc | sudo apt-key add -
+sudo apt update
+
+# 2. 安装 ROS Base + 驱动依赖
 sudo apt install ros-noetic-ros-base python3-serial python3-pip
 sudo apt install ros-noetic-rosserial-python
 pip3 install pyserial pyyaml
 
-# 从 PC 迁移工作空间
-# PC 上: scp -r ~/ROS lawliet@<J1900_IP>:~/
+# 3. 从 PC 迁移工作空间
+# PC 上执行:
+#   scp -r ~/ROS lawliet@<J1900_IP>:~/
 # J1900 上:
 cd ~/ROS && source /opt/ros/noetic/setup.bash && catkin_make
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
