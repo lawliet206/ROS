@@ -71,11 +71,13 @@ sudo apt install ros-noetic-map-server ros-noetic-teleop-twist-keyboard
 sudo apt install ros-noetic-robot-state-publisher ros-noetic-topic-tools
 sudo apt install ros-noetic-robot-localization
 sudo apt install ros-noetic-teb-local-planner
+sudo apt install ros-noetic-tf ros-noetic-interactive-markers libfftw3-dev python3-scipy
 sudo apt install mesa-utils libgl1-mesa-dri libgl1-mesa-glx
-pip3 install pyserial pyyaml
+pip3 install pyserial pyyaml pykalman
 
 # 3. 编译工作空间
-cd ~/ROS && source /opt/ros/noetic/setup.bash
+cd ~/ROS
+git clone https://github.com/angusleigh/leg_tracker.git src/leg_tracker && source /opt/ros/noetic/setup.bash
 catkin_init_workspace src && catkin_make
 source ~/ROS/devel/setup.bash
 echo "source ~/ROS/devel/setup.bash" >> ~/.bashrc
@@ -359,6 +361,8 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | 3 | J1900 | `roslaunch robot_bringup follow.launch sensor:=fusion lidar_port:=/dev/ttyUSB1 radar_port:=/dev/ttyUSB2` |
 
 > 激光（红外光）和毫米波（24GHz 射频）物理频段不同，互不干扰。
+>
+> 方案三的 launch 会自动在 J1900 上启动：`s9_lidar_driver`（激光）、`ld2402_publisher`（毫米波驱动）、`fusion_follower`（融合跟踪）。**无需手动启动雷达驱动**。
 
 **融合跟随可调参数：**
 
@@ -370,6 +374,22 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | `kp_angular` | 0.5 | 角度 P 增益 |
 | `deadzone` | 0.2 | 死区 (m) |
 | `dist_filter_alpha` | 0.3 | 距离 EMA 滤波 |
+
+---
+
+### 7.4 腿跟踪测试（leg_tracker）
+
+用机器学习腿检测器替代原生激光聚类，输出人的精确位置。
+
+| # | 设备 | 命令 |
+|---|------|------|
+| 1 | PC | `roscore` |
+| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
+| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
+| 4 | PC | `python3 -c "import rospy; rospy.init_node('s'); rospy.set_param('/robot_description', open('$HOME/ROS/src/robot_bringup/urdf/robot.urdf').read())" & rosrun robot_state_publisher robot_state_publisher` |
+| 5 | PC | `roslaunch leg_tracker joint_leg_tracker.launch scan:=/scan fixed_frame:=laser_link confidence_threshold_to_maintain_track:=-1.0 dist_travelled_together_to_initiate_leg_pair:=0.1 max_leg_pairing_dist:=1.2` |
+
+验证：另开终端 `rostopic echo /people_tracked`，看到 `person_id` 即成功。
 
 ---
 
@@ -399,6 +419,7 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | PC | `roslaunch robot_bringup follow.launch sensor:=laser` | 激光跟随 |
 | PC | `roslaunch robot_bringup follow.launch sensor:=radar radar_port:=/dev/ttyUSB2` | 毫米波跟随 |
 | PC | `roslaunch robot_bringup follow.launch sensor:=fusion` | 融合跟随 |
+| PC | `roslaunch leg_tracker joint_leg_tracker.launch scan:=/scan fixed_frame:=laser_link` | 腿跟踪 |
 
 ---
 
