@@ -14,13 +14,7 @@ ld2402_publisher.py — LD2402 毫米波雷达数据发布
 """
 import rospy
 import serial
-import struct
 from std_msgs.msg import Float64, Bool
-
-
-RADAR_FRAME_HEADER = b'\xF4\xF3\xF2\xF1'
-RADAR_FRAME_TYPE_DISTANCE = 0x83
-ST_IDLE, ST_HEADER, ST_FRAME = 0, 1, 2
 
 
 class LD2402Publisher:
@@ -45,8 +39,6 @@ class LD2402Publisher:
             raise
 
         self._buf = b""
-        self._state = ST_IDLE
-        self._frame = bytearray()
 
         rospy.on_shutdown(self._stop)
 
@@ -64,34 +56,6 @@ class LD2402Publisher:
         self.presence = True
         self.last_detect_time = rospy.Time.now().to_sec()
 
-    def _parse_ascii(self, text):
-        try:
-            s = text.decode("ascii", errors="ignore").strip()
-        except Exception:
-            return
-        if "distance:" in s:
-            try:
-                val = float(s.split("distance:")[-1].split()[0])
-                self._update_target(val)
-            except (ValueError, IndexError):
-                pass
-        elif s == "OFF":
-            self.presence = False
-
-    def _parse_distance_frame(self, frame):
-        if len(frame) < 14:
-            return
-        status = frame[8]
-        vals = []
-        for i in range(12, len(frame) - 3, 4):
-            raw = struct.unpack_from("<I", frame, i)[0]
-            if raw > 0:
-                vals.append(raw * 0.1)
-        if vals:
-            self._update_target(min(vals))
-        elif status == 0:
-            self.presence = False
-
     def read_serial(self):
         try:
             raw = self.ser.read(256)
@@ -101,31 +65,21 @@ class LD2402Publisher:
             return
         self._buf += raw
 
-        while self._buf:
-            if self._state == ST_IDLE:
-                idx = self._buf.find(RADAR_FRAME_HEADER)
-                if idx < 0:
-                    if len(self._buf) > 256:
-                        self._buf = self._buf[-4:]
-                    break
-                if idx > 0:
-                    self._parse_ascii(self._buf[:idx])
-                self._buf = self._buf[idx + 4:]
-                self._frame = bytearray(RADAR_FRAME_HEADER)
-                self._state = ST_HEADER
-            elif self._state == ST_HEADER:
-                if len(self._buf) < 1:
-                    break
-                frame_type = self._buf[0]
-                self._frame.append(frame_type)
-                self._buf = self._buf[1:]
-                self._state = ST_FRAME if frame_type == RADAR_FRAME_TYPE_DISTANCE else ST_IDLE
-            elif self._state == ST_FRAME:
-                self._frame.append(self._buf[0])
-                self._buf = self._buf[1:]
-                if len(self._frame) >= 24:
-                    self._parse_distance_frame(bytes(self._frame))
-                    self._state = ST_IDLE
+        # 按行解析 ASCII 数据
+        while b"\n" in self._buf:
+            line, self._buf = self._buf.split(b"\n", 1)
+            try:
+                text = line.decode("ascii", errors="ignore").strip()
+                if text.startswith("distance:"):
+                    try:
+                        val = float(text.split("distance:")[-1].strip())
+                        self._update_target(val)
+                    except (ValueError, IndexError):
+                        pass
+                elif text == "OFF":
+                    self.presence = False
+            except Exception:
+                pass
 
         if len(self._buf) > 512:
             self._buf = self._buf[-128:]
