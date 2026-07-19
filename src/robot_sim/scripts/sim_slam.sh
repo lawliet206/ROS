@@ -24,9 +24,11 @@ fi
 source "$WS_DIR/devel/setup.bash"
 
 # ---------- 杀死旧进程 ----------
-echo "=== 清理旧 Gazebo 进程 ==="
-killall gzserver gzclient 2>/dev/null || true
-sleep 1
+echo "=== 清理旧进程 ==="
+timeout 3 killall -9 gzserver gzclient roslaunch rosmaster rosout rviz 2>/dev/null || true
+sleep 2
+unset ROS_MASTER_URI ROS_IP ROS_HOSTNAME
+rm -rf ~/.ros/log/* 2>/dev/null || true
 
 # ---------- GPU / 软件渲染检测 ----------
 HAS_GL=false

@@ -24,39 +24,49 @@
 #define I2C_SDA       21
 #define I2C_SCL       22
 
-#define LEDC_FREQ      20000
-#define LEDC_RES       10
+#define LEDC_FREQ      20000                   // [可调] PWM 频率 (Hz). TB6612 支持到 100kHz. 20kHz 在听觉上限, 降低会听到电机啸叫
+#define LEDC_RES       10                      // [可调] PWM 分辨率. 10bit=0~1023. 改大会降低频率, 改小会降低控制精度
 
-#define WHEEL_DIAMETER      0.085f      
-#define WHEEL_BASE          0.180f      
-#define GEAR_RATIO          10.0f       
-#define ENCODER_PPR         11.0f       
-#define ENCODER_TICKS_PER_REV (ENCODER_PPR * 4.0f) 
-#define METERS_PER_TICK     (M_PI * WHEEL_DIAMETER / (ENCODER_TICKS_PER_REV * GEAR_RATIO))
+// ========== 机械参数 (换轮子/换电机/改轮距时必须改) ==========
+#define WHEEL_DIAMETER      0.085f             // [实车校准] 轮径 (m). 用卷尺实测, 橡胶轮随气压和磨损变化
+#define WHEEL_BASE          0.180f             // [实车校准] 轮距 (m). 左右轮着地点中心距, 不准则转弯半径和里程计航向都偏
+#define GEAR_RATIO          10.0f              // [硬件参数] 减速比. JGB37-520 常见 1:10, 1:19, 1:30. 编码器在电机轴上, 转速需除以此值得到轮子转速
+#define ENCODER_PPR         11.0f              // [硬件参数] 编码器线数 (脉冲/转). JGB37-520 AB 相霍尔每转 11 个脉冲
+#define ENCODER_TICKS_PER_REV (ENCODER_PPR * 4.0f)  // 四倍频后每转 tick 数 (11×4=44). 不改
+#define METERS_PER_TICK     (M_PI * WHEEL_DIAMETER / (ENCODER_TICKS_PER_REV * GEAR_RATIO))  // 每个编码器 tick 对应的轮子行走距离 (m). 不改
 
+// ========== 编码器方向 (实车必须验证) ==========
 // 编码器方向系数 — 实车验证方法：
 //   1. 先设两侧均为 1，手动推车前进 1 米
 //   2. serial_bridge 打印 /odom position.x，若为正值则前进方向正确
 //   3. 若 position.x 为负值，将两轮系数互换符号（如 1→-1, -1→1）
 //   4. 再验证转向：原地旋转 90°，/odom orientation.z 应正确累积
 //   5. 最后验证左右轮差速方向是否一致，若两轮转速相反则取反一侧
-#define ENC_LEFT_DIR       1
-#define ENC_RIGHT_DIR      -1
+#define ENC_LEFT_DIR       1                  // [实车校准] 左轮编码器方向. 1=正向, -1=反向. 推车前进看 /odom position.x 正负
+#define ENC_RIGHT_DIR      -1                 // [实车校准] 右轮编码器方向. 注意右轮电机是镜像安装, 通常需要取反
 
-#define MAX_RAMP_RPM_PER_SEC  300.0f  
-#define RPM_FILTER_ALPHA      0.3f    
-#define RPM_STOP_THRESHOLD    1.0f    
-#define PID_INTEGRAL_LIMIT    500.0f  
-#define MAX_CMD_RPM           600.0f  
-#define MIN_START_PWM         150.0f  
-#define PID_OUTPUT_LIMIT      1023.0f 
+// ========== PID 控制参数 ==========
+// PID 输出 = Kp*error + Ki*∫error*dt + Kd*d(measurement)/dt
+// 微分项算在测量值上 (不是误差), 避免设定值突变时产生过冲
+// 调参顺序: 先只调 Kp 让车轮跟得上设定转速, 再加 Ki 消除稳态误差, 最后加少量 Kd 抑制震荡
+#define MAX_RAMP_RPM_PER_SEC  300.0f          // [可调] RPM 斜坡限制 (RPM/s). 类似加速度限制, 防止电机电流突变. 300 对应约 1.3m/s² 线加速度. 车重或电池弱时降低
+#define RPM_FILTER_ALPHA      0.3f            // [可调] 转速低通滤波 α (0~1). 越小越平滑但响应越慢. 0.3 是默认. 高速场景需要更快响应时可加大到 0.5, 但 RPM 读数会更抖
+#define RPM_STOP_THRESHOLD    1.0f            // [可调] 停止判定 RPM 阈值. 低于此值认为电机已停, PID 复位. 设太大电机会一直微动, 太小则停下来后还有残余 PWM
+#define PID_INTEGRAL_LIMIT    500.0f          // [可调] PID 积分上限. 限制积分项不会无限累积 (抗积分饱和). 过大 → 积分失控, 过小 → 稳态误差清不掉
+#define MAX_CMD_RPM           600.0f          // [可调] 最大允许 RPM (轮子转速, 不是电机转速!). 600 RPM 轮子 = 600/10=60 电机 RPM? 不对: 轮子 RPM = 电机 RPM/减速比. 600 RPM 轮子 × 0.267m/转 ≈ 2.7m/s 理论最大. JGB37-520 实际带载跑不到这么高
+#define MIN_START_PWM         150.0f          // [可调] 启动死区 PWM (0~1023). TB6612 在极低 PWM 时电机不转, 需要最小值克服静摩擦力. 太小起步抖, 太大起步冲. sqrt 平滑过渡避免突然窜出
+#define PID_OUTPUT_LIMIT      1023.0f         // [可调] PID 输出上限. 10bit PWM 最大 1023. 小于此值可限制最大功率, 保护电机或省电
 
-#define LOOP_INTERVAL_US  10000
-#define WATCHDOG_TIMEOUT  500
+// ========== 时序与安全 ==========
+#define LOOP_INTERVAL_US  10000                 // [可调] 主循环间隔 (μs). 10000=10ms=100Hz. 改小提高控制频率但增加 CPU 负载. 改大降低频率但编码器采样更稀疏, 高速下 RPM 估算不准
+#define WATCHDOG_TIMEOUT  500                   // [可调] 看门狗超时 (ms). 超过此时间没收到 /cmd_vel 则自动停车拉低 STBY. 设太小正常行驶中突然无指令会急停, 太大失控后要很久才自动停
 
-#define STALL_DETECT_PWM_THRESH  800.0f
-#define STALL_DETECT_RPM_THRESH  5.0f
-#define STALL_DETECT_TIME_MS     500
+// ========== 堵转检测 ==========
+// 判定条件: PWM 已给到很高 (STALL_DETECT_PWM_THRESH) 但 RPM 几乎为零 (STALL_DETECT_RPM_THRESH) 持续超过 STALL_DETECT_TIME_MS
+// 触发后该侧电机切断 PWM, 等 target_rpm 降回 1 以下自动恢复
+#define STALL_DETECT_PWM_THRESH  800.0f         // [可调] 堵转判定 PWM 阈值 (0~1023). 到这么大 PWM 还不转, 基本卡住了. 设太低容易误判, 太高真堵转时检测不到
+#define STALL_DETECT_RPM_THRESH  5.0f           // [可调] 堵转判定 RPM 阈值. 低于此值 + PWM 超阈值 = 堵转. 设太高正常运行就误判, 太低堵转难检测
+#define STALL_DETECT_TIME_MS     500            // [可调] 堵转确认时间 (ms). 持续堵转这么久才判定. 设太短过个坎就误判, 太长堵转时烧电机
 
 ros::NodeHandle nh;
 
@@ -97,8 +107,11 @@ bool stall_fault_l = false;
 bool stall_fault_r = false;
 
 #define MPU6050_ADDR 0x68
-#define IMU_LP_ALPHA  0.30f
-#define CALIB_SAMPLES 200
+// ========== IMU (MPU6050) 参数 ==========
+// IMU 低通滤波 α (0~1). 越小越平滑但延迟越大. 0.3 是平衡值
+// EKF 用 IMU 数据时此值影响融合质量: 太大=噪声多, 太小=延迟导致相位差
+#define IMU_LP_ALPHA  0.30f                    // [可调] IMU 低通滤波系数
+#define CALIB_SAMPLES 200                      // [可调] 陀螺仪校准样本数. 越多越准但启动越慢. 200≈1秒
 
 float gbias_x = 0, gbias_y = 0, gbias_z = 0;
 float abias_x = 0, abias_y = 0, abias_z = 0;
@@ -110,8 +123,12 @@ float imu_gx = 0, imu_gy = 0, imu_gz = 0;
 float accel_scale = 1.0f;
 bool imu_healthy = true;
 
-#define COMP_GAIN      0.85f
-#define GYRO_DEADBAND  0.002f
+// 互补滤波的陀螺仪权重 (0~1). 0.85=85%信陀螺仪, 15%信加速度计
+// 设太接近 1: roll/pitch 长期漂移; 太接近 0: 振动敏感的 roll/pitch 乱跳
+#define COMP_GAIN      0.85f                   // [可调] 互补滤波陀螺仪权重
+#define GYRO_DEADBAND  0.002f                  // [可调] 陀螺仪死区 (rad/s). 低于此值视为零, 避免静止时角度漂移. 太小=漂移, 太大=慢转被忽略
+// 注意: cf_yaw 是纯陀螺仪积分, 没有磁力计修正, 长期会漂移 (几度/分钟)
+// EKF 融合时建议只用 IMU 的角速度和加速度, 不要用 IMU 的 orientation 做偏航参考
 float cf_roll = 0, cf_pitch = 0;
 float cf_yaw = 0;
 
@@ -194,9 +211,12 @@ void set_motor_raw(float left_f, float right_f) {
   if (stall_fault_r) right_f = 0;
   int16_t left = (int16_t)left_f;
   int16_t right = (int16_t)right_f;
+  // 左轮: forward (left>0) → IN1=LOW, IN2=HIGH
   if (left > 0) { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, HIGH); ledcWrite(PIN_L_PWM, left); } 
   else if (left < 0) { digitalWrite(PIN_L_IN1, HIGH); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, -left); } 
   else { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, 0); }
+  // 右轮: forward (right>0) → IN1=HIGH, IN2=LOW (与左轮反相, 因为电机镜像安装)
+  // ⚠️ 实车验证: 推车前进看 /odom position.x 正负, 若为负则交换右轮 IN1/IN2 逻辑 (把 HIGH/LOW 互换)
   if (right > 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, right); } 
   else if (right < 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(PIN_R_PWM, -right); } 
   else { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, 0); }
@@ -225,9 +245,11 @@ float pid_compute(PIDState &s, float setpoint, float measurement, float dt) {
 
 void pid_reset(PIDState &s) { s.integral = 0; s.prev_measurement = 0; s.initialized = false; }
 
+// ========== I2C 总线恢复 ==========
+// 当 I2C 连续失败超过阈值时, 复位 I2C 总线并重新初始化 IMU
+// 注意: 恢复期间 (约 50ms) 电机会被强制停止, 导航中触发会导致短暂刹车
 int i2c_fail_count = 0;
-
-void recover_i2c() {
+void recover_i2c() {                         // [可调] I2C 失败阈值在 read_imu() 中: i2c_fail_count > 20 (约 200ms 连续失败). 设太小=误触发, 太大=挂了很久才恢复
   set_motor_raw(0, 0);
   pid_reset(pid_left);
   pid_reset(pid_right);
@@ -248,17 +270,18 @@ void recover_i2c() {
 }
 
 void setup_imu() {
-  Wire.setTimeOut(20);
+  Wire.setTimeOut(20);                       // [可调] I2C 超时 (ms). 太短 I2C 经常超时失败, 太长会卡主循环
   Wire.beginTransmission(MPU6050_ADDR);
   if (Wire.endTransmission() != 0) {
     imu_healthy = false;
     return;
   }
   imu_healthy = true;
-  Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x6B); Wire.write(0x00); Wire.endTransmission();
-  Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1A); Wire.write(0x03); Wire.endTransmission();
-  Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1B); Wire.write(0x08); Wire.endTransmission();
-  Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1C); Wire.write(0x08); Wire.endTransmission();
+  // MPU6050 寄存器配置 — 不改
+  Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x6B); Wire.write(0x00); Wire.endTransmission();  // 退出睡眠模式
+  Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1A); Wire.write(0x03); Wire.endTransmission();  // DLPF=3 (44Hz 带宽, 平衡噪声和延迟)
+  Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1B); Wire.write(0x08); Wire.endTransmission();  // [可调] 陀螺仪量程. 0x08=±500°/s (灵敏度 65.5 LSB/°/s). 改 0x00=±250, 0x10=±1000, 0x18=±2000. 改量程需同步改校准代码中 65.5f 除数和 imu_gx 换算
+  Wire.beginTransmission(MPU6050_ADDR); Wire.write(0x1C); Wire.write(0x08); Wire.endTransmission();  // [可调] 加速度计量程. 0x08=±4g (灵敏度 8192 LSB/g). 改 0x00=±2g, 0x10=±8g, 0x18=±16g. 改量程需同步改 calibrate_imu 和 read_imu 中的 8192.0f 除数
 }
 
 void calibrate_imu() {
@@ -391,9 +414,10 @@ void cmdVelCallback(const geometry_msgs::Twist& msg) {
 ros::Subscriber<geometry_msgs::Twist> sub_cmd("cmd_vel", &cmdVelCallback);
 
 void setup() {
-  Serial.setRxBufferSize(1024);
-  Serial.setTxBufferSize(1024);
-  Serial.begin(460800);
+  // ========== 通信参数 ==========
+  Serial.setRxBufferSize(1024);              // [可调] 串口接收缓冲区 (bytes). 460800 波特率下 1024 字节够用. 如果丢包/粘包频繁可以加大, 但 ESP32 内存有限
+  Serial.setTxBufferSize(1024);              // [可调] 串口发送缓冲区 (bytes). 同上
+  Serial.begin(460800);                      // [可调] 波特率. 460800 为默认. 降低可提高稳定性, 但数据吞吐量下降
   
   pinMode(PIN_L_ENC_A, INPUT_PULLUP); pinMode(PIN_L_ENC_B, INPUT_PULLUP);
   pinMode(PIN_R_ENC_A, INPUT_PULLUP); pinMode(PIN_R_ENC_B, INPUT_PULLUP);
@@ -406,8 +430,11 @@ void setup() {
   setup_imu();
   for (int i = 0; i < 10; i++) { read_imu(); delay(10); }
   
-  pid_left  = {1.5f, 0.3f, 0.05f, 0, 0, false};
-  pid_right = {1.5f, 0.3f, 0.05f, 0, 0, false}; 
+  // ========== PID 增益 (左右独立可调) ==========
+  // 调参顺序: 先只加 Kp 让轮子跟得上设定转速, 再加 Ki 消除稳态误差 (低速/重载时重要), 最后加少量 Kd 抑制震荡
+  // {Kp, Ki, Kd, integral, prev_measurement, initialized}
+  pid_left  = {1.5f, 0.3f, 0.05f, 0, 0, false};   // [可调] 左轮 PID. Kp=比例, Ki=积分, Kd=微分. 左右通常一致, 但如果两侧电机/传动有差异可独立调
+  pid_right = {1.5f, 0.3f, 0.05f, 0, 0, false};   // [可调] 右轮 PID. 调大 Kp: 跟得更紧但可能震荡. 调大 Ki: 消除稳态误差但可能过冲. 调大 Kd: 抑制震荡但可能放大噪声
   
   nh.initNode();
   nh.advertise(pub_odom);
@@ -551,13 +578,16 @@ void loop() {
   odom_msg.pose.pose.orientation.w = cos(odom_theta / 2.0);
   odom_msg.twist.twist.linear.x = vx;
   odom_msg.twist.twist.angular.z = vth;
+  // ========== 里程计协方差 ==========
+  // 协方差矩阵告诉 ROS 这条数据的可信度. 值越小=越可信, 值越大=越不靠谱
+  // [0]=(x,x), [7]=(y,y), [35]=(yaw,yaw)  — 6x6 矩阵对角线
   for(int i=0; i<36; i++) odom_msg.pose.covariance[i] = 0.0;
-  odom_msg.pose.covariance[0] = 0.001; 
-  odom_msg.pose.covariance[7] = 0.001; 
-  odom_msg.pose.covariance[35] = 0.001; 
+  odom_msg.pose.covariance[0] = 0.001;       // [可调] 位置 x 方差 (m²). 增大表示不相信编码器的位置估计, EKF 会更依赖激光/IMU 做定位
+  odom_msg.pose.covariance[7] = 0.001;       // [可调] 位置 y 方差
+  odom_msg.pose.covariance[35] = 0.001;      // [可调] 偏航角方差 (rad²). 打滑严重时增大此值, 让 EKF 少信里程计航向
   for(int i=0; i<36; i++) odom_msg.twist.covariance[i] = 0.0;
-  odom_msg.twist.covariance[0] = 0.001;
-  odom_msg.twist.covariance[35] = 0.001;
+  odom_msg.twist.covariance[0] = 0.001;      // [可调] 线速度 x 方差
+  odom_msg.twist.covariance[35] = 0.001;     // [可调] 角速度方差
 
   if (imu_data_valid) {
     imu_msg.header.stamp = nh.now();
@@ -580,18 +610,20 @@ void loop() {
     imu_msg.orientation.z = cr * cp * sy - sr * sp * cy;
     imu_msg.orientation.w = cr * cp * cy + sr * sp * sy;
 
+    // ========== IMU 协方差 ==========
+    // [0]=(ax,ax), [4]=(ay,ay), [8]=(az,az)  — 3x3 矩阵对角线
     for (int i = 0; i < 9; i++) imu_msg.linear_acceleration_covariance[i] = 0.0;
-    imu_msg.linear_acceleration_covariance[0] = 0.01; 
-    imu_msg.linear_acceleration_covariance[4] = 0.01; 
-    imu_msg.linear_acceleration_covariance[8] = 0.01; 
+    imu_msg.linear_acceleration_covariance[0] = 0.01;   // [可调] 加速度 x 方差 (m²/s⁴). 振动大时增大
+    imu_msg.linear_acceleration_covariance[4] = 0.01;   // [可调] 加速度 y 方差
+    imu_msg.linear_acceleration_covariance[8] = 0.01;   // [可调] 加速度 z 方差
     for (int i = 0; i < 9; i++) imu_msg.angular_velocity_covariance[i] = 0.0;
-    imu_msg.angular_velocity_covariance[0] = 0.01; 
-    imu_msg.angular_velocity_covariance[4] = 0.01; 
-    imu_msg.angular_velocity_covariance[8] = 0.01; 
+    imu_msg.angular_velocity_covariance[0] = 0.01;      // [可调] 角速度 x 方差 (rad²/s²)
+    imu_msg.angular_velocity_covariance[4] = 0.01;      // [可调] 角速度 y 方差
+    imu_msg.angular_velocity_covariance[8] = 0.01;      // [可调] 角速度 z 方差
     for (int i = 0; i < 9; i++) imu_msg.orientation_covariance[i] = 0.0;
-    imu_msg.orientation_covariance[0] = 0.05;
-    imu_msg.orientation_covariance[4] = 0.05;
-    imu_msg.orientation_covariance[8] = 100.0;
+    imu_msg.orientation_covariance[0] = 0.05;           // [可调] roll 方差 (rad²)
+    imu_msg.orientation_covariance[4] = 0.05;           // [可调] pitch 方差
+    imu_msg.orientation_covariance[8] = 100.0;          // [重要] yaw 方差=100, 表示偏航角完全不可信. 因为 cf_yaw 是纯陀螺仪积分没有磁力计修正, EKF 不应使用此值做偏航参考
   }
 
   if (loop_count % 2 == 0) {
