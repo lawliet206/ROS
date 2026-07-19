@@ -9,8 +9,7 @@ PC (ROS Master, 10.222.149.11) ←WiFi→ J1900 (车载) ←USB→ ESP32 (rosser
                                           │              ├─ PWM → TB6612FNG → 左/右电机
                                           │              ├─ PCNT ← 编码器 (JGB37-520)
                                           │              └─ I2C  ← MPU6050 IMU
-                                          ├─ USB ← 激光雷达 (S9-FSRD-V1.0, 115200, AA55协议)
-                                          └─ USB ← 毫米波雷达 (HLK-LD2402, 115200, 24GHz)
+                                          └─ USB ← 激光雷达 (S9-FSRD-V1.0, 115200, AA55协议)
 ```
 
 ## 🔧 硬件参数
@@ -24,7 +23,6 @@ PC (ROS Master, 10.222.149.11) ←WiFi→ J1900 (车载) ←USB→ ESP32 (rosser
 | 轮子 | 85mm 橡胶轮 | 轮距 **180mm** |
 | 电池 | 3S LiPo 11.1V 5200mAh | XT60 接口 |
 | 激光雷达 | S9-FSRD-V1.0 RX | 115200, AA55, ~69Hz, 39点/帧 |
-| 毫米波雷达 | HLK-LD2402 | 24GHz, UART 115200, ±60°, 最远10m |
 
 ### 引脚接线
 
@@ -38,9 +36,6 @@ TB6612FNG ↔ ESP32:
   左A→GPIO27  左B→GPIO23  右A→GPIO14  右B→GPIO13
 
 MPU6050: SDA→GPIO21  SCL→GPIO22
-
-LD2402 毫米波雷达:
-  TX→USB-UART RX  3.3V→VCC  GND→GND  (插 J1900 USB, 不接 ESP32)
 ```
 
 ## 📁 项目结构
@@ -50,7 +45,7 @@ ROS/
 ├── src/
 │   ├── robot_bringup/          # 实物包 (J1900 需要这个)
 │   │   ├── launch/             # bringup/slam/navigation/ekf/follow
-│   │   ├── scripts/            # s9_lidar_driver/laser_follower/radar_follower/send_goals
+│   │   ├── scripts/            # s9_lidar_driver/laser_follower/send_goals
 │   │   ├── urdf/robot.urdf    # 实物 URDF (轮距 0.180)
 │   │   └── config/ekf.yaml
 │   └── robot_sim/              # 仿真包 (仅 PC 用)
@@ -75,7 +70,7 @@ rosrun map_server map_saver -f ~/maps/sim_map
 bash ~/ROS/src/robot_sim/scripts/sim_navigation.sh ~/maps/sim_map.yaml
 ```
 
-### 实物 (PC + J1900 + ESP32 + 雷达)
+### 实物 (PC + J1900 + ESP32 + 激光雷达)
 
 ```bash
 # J1900 终端1: ESP32 rosserial
@@ -88,20 +83,12 @@ rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1
 roslaunch robot_bringup slam.launch start_lidar:=false
 ```
 
-### 人体跟随 (LD2402 毫米波雷达)
+### 激光人体跟随
+
+### 激光人体跟随
 
 ```bash
-# J1900 终端1: ESP32 rosserial
-rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800
-
-# J1900 终端2: LD2402 人体跟随 (直接插 USB, 无需额外驱动)
-roslaunch robot_bringup follow.launch sensor:=radar radar_port:=/dev/ttyUSB2
-```
-
-人在车前走，车自动跟（仅前/后, ±60° 扇区探测）。若用激光跟随:
-
-```bash
-roslaunch robot_bringup follow.launch sensor:=laser
+roslaunch robot_bringup follow.launch
 ```
 
 ### EKF 传感器融合（可选，提升定位精度）
