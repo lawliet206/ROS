@@ -5,13 +5,10 @@ find_package(catkin REQUIRED)
 
 catkin_package()
 
-# 安装脚本（注：serial_bridge.py 已被 rosserial 取代，不再安装）
+# 安装脚本
 catkin_install_python(PROGRAMS
   scripts/s9_lidar_driver.py
   scripts/laser_follower.py
-  scripts/radar_follower.py
-  scripts/fusion_follower.py
-  scripts/ld2402_publisher.py
   scripts/scan_deskew.py
   scripts/send_goals.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
