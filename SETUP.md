@@ -112,15 +112,51 @@ Arduino IDE 打开 `esp32_firmware/esp32_firmware.ino`：
 
 两台在同一 WiFi 下。
 
+### 3.1 查看 IP
+
 ```bash
-# PC ~/.bashrc
-export ROS_MASTER_URI=http://10.222.149.11:11311
+# 两台机器都执行
+hostname -I
+# 假设: PC=192.168.1.118  J1900=192.168.1.200
+```
+
+### 3.2 SSH 免密登录
+
+```bash
+# PC 上执行 (只需一次)
+ssh-keygen -t rsa -b 4096 -N "" -f ~/.ssh/id_rsa
+ssh-copy-id lawliet@192.168.1.200   # 输入 J1900 密码
+
+# 测试
+ssh lawliet@192.168.1.200 "echo ssh ok"
+```
+
+### 3.3 设置 ROS 主从
+
+```bash
+# ========== PC (~/.bashrc 末尾添加) ==========
+export ROS_MASTER_URI=http://192.168.1.118:11311   # PC 是 Master
 export ROS_IP=192.168.1.118
 
-# J1900 ~/.bashrc
-export ROS_MASTER_URI=http://10.222.149.11:11311
-export ROS_IP=<J1900的IP>   # hostname -I 查看
+# ========== J1900 (~/.bashrc 末尾添加) ==========
+export ROS_MASTER_URI=http://192.168.1.118:11311   # 指向 PC
+export ROS_IP=192.168.1.200
+
+# 两台都 source 一下让配置生效
+source ~/.bashrc
 ```
+
+### 3.4 验证
+
+```bash
+# PC 启动 roscore
+roscore
+
+# J1900 测试能否连上 Master
+rostopic list   # 应看到 /rosout 和 /rosout_agg
+```
+
+> ⚠️ 如果 J1900 的 `rostopic list` 卡住：PC 和 J1900 互相 `ping` 对方 IP，确认在同一网络。关闭 PC 防火墙：`sudo ufw disable`。
 
 ---
 
