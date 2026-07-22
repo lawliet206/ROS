@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """
-laser_follower.py — 纯激光跟随 (跟踪最近物体)
-================================================
+laser_follower.py — 纯激光跟随 (带人体宽度约束)
+==================================================
 算法:
-  1. 聚类激光点，找到最近的有效簇
-  2. 先旋转对准目标，再前后调整距离
-  3. Ctrl-C 自动停车
+  1. 聚类激光点
+  2. 筛选符合人体宽度的簇 (0.2~0.5m, 墙/柱子自动排除)
+  3. 取最近簇 → 对准角度 → 调整距离
 """
 import rospy
 import math
+from collections import deque
 from sensor_msgs.msg import LaserScan
 from geometry_msgs.msg import Twist
 
@@ -16,13 +17,16 @@ from geometry_msgs.msg import Twist
 class LaserFollower:
 
     def __init__(self):
-        self.target_dist  = rospy.get_param("~target_dist",  1.0)
-        self.max_linear   = rospy.get_param("~max_linear",   0.5)
-        self.max_angular  = rospy.get_param("~max_angular",  0.6)
-        self.min_dist     = rospy.get_param("~min_dist",     0.30)
-        self.max_dist     = rospy.get_param("~max_dist",     5.0)
-        self.cluster_tol  = rospy.get_param("~cluster_tol",  0.15)
-        self.min_points   = rospy.get_param("~min_points",   5)
+        self.target_dist   = rospy.get_param("~target_dist",    1.0)
+        self.max_linear    = rospy.get_param("~max_linear",     0.5)
+        self.max_angular   = rospy.get_param("~max_angular",    0.6)
+        self.min_dist      = rospy.get_param("~min_dist",       0.30)
+        self.max_dist      = rospy.get_param("~max_dist",       5.0)
+        self.cluster_tol   = rospy.get_param("~cluster_tol",    0.15)
+        self.min_points    = rospy.get_param("~min_points",     5)
+        self.min_body_width  = rospy.get_param("~min_body_width",  0.1)
+        self.max_body_width  = rospy.get_param("~max_body_width",  0.55)
+        self.min_lock_frames = rospy.get_param("~min_lock_frames", 3)
 
         self.kp_linear  = 0.4
         self.kp_angular = 0.5
@@ -30,34 +34,42 @@ class LaserFollower:
         self.target_angle = 0.0
         self.target_dist_ema = 0.0
         self.locked = False
+        self.lock_counter = 0
+        self.history = deque(maxlen=10)
 
         cmd_topic = rospy.get_param("~cmd_vel_topic", "/cmd_vel")
         self.cmd_pub = rospy.Publisher(cmd_topic, Twist, queue_size=10)
         rospy.Subscriber("/scan", LaserScan, self.scan_callback)
 
         rospy.on_shutdown(self.stop)
-        rospy.loginfo("[Follow] 已启动 (dist=%.1fm, vmax=%.1f, wmax=%.1f)",
-                       self.target_dist, self.max_linear, self.max_angular)
+        rospy.loginfo("[Follow] width=%.2f~%.2fm lock=%dframes | dist=%.1fm vmax=%.1f",
+                       self.min_body_width, self.max_body_width, self.min_lock_frames,
+                       self.target_dist, self.max_linear)
 
     def stop(self):
         self.cmd_pub.publish(Twist())
         rospy.loginfo("[Follow] 已停止")
 
+    def _cluster_width(self, cluster):
+        """计算簇的物理宽度 (m)"""
+        if len(cluster) < 2:
+            return 0.0
+        p0, p1 = cluster[0], cluster[-1]
+        return math.hypot(p1[0] - p0[0], p1[1] - p0[1])
+
     def scan_callback(self, scan):
-        # 收集有效点 (只看前方 ±90°)
         points = []
         for i, r in enumerate(scan.ranges):
             if self.min_dist < r < self.max_dist and math.isfinite(r):
                 a = scan.angle_min + i * scan.angle_increment
-                if -1.57 < a < 1.57:   # 只看前方, 忽略身后
+                if -1.57 < a < 1.57:
                     points.append((r * math.cos(a), r * math.sin(a)))
 
         if len(points) < self.min_points:
-            self.cmd_pub.publish(Twist())
-            self.locked = False
+            self._lost()
             return
 
-        # 聚类：相邻点距离 < cluster_tol 的归为一簇
+        # 基于欧氏距离的聚类
         clusters = []
         cur = [points[0]]
         for i in range(1, len(points)):
@@ -73,12 +85,22 @@ class LaserFollower:
             clusters.append(cur)
 
         if not clusters:
-            self.cmd_pub.publish(Twist())
-            self.locked = False
+            self._lost()
             return
 
-        # 取最近（距离最小）的簇
-        best = min(clusters, key=lambda c: math.hypot(
+        # ---- 人体宽度约束 ----
+        human_clusters = [c for c in clusters
+                          if self.min_body_width <= self._cluster_width(c) <= self.max_body_width]
+
+        rospy.logdebug("[Follow] clusters=%d human=%d",
+                       len(clusters), len(human_clusters))
+
+        if not human_clusters:
+            self._lost()
+            return
+
+        # 从符合人体宽度的簇中取最近
+        best = min(human_clusters, key=lambda c: math.hypot(
             sum(p[0] for p in c) / len(c),
             sum(p[1] for p in c) / len(c)))
 
@@ -87,15 +109,30 @@ class LaserFollower:
         dist = math.hypot(cx, cy)
         angle = math.atan2(cy, cx)
 
-        # EMA 滤波
+        # ---- 连续锁定检测 ----
+        self.history.append((angle, dist))
+        self.lock_counter = min(self.lock_counter + 1, self.min_lock_frames * 2)
+
+        if not self.locked and self.lock_counter >= self.min_lock_frames:
+            self.locked = True
+            rospy.loginfo("[Follow] 锁定目标")
+
         if self.locked:
-            self.target_dist_ema = 0.5 * dist + 0.5 * self.target_dist_ema
+            self.target_dist_ema = 0.4 * dist + 0.6 * self.target_dist_ema
+            self.target_angle = angle
         else:
             self.target_dist_ema = dist
-            self.locked = True
+            self.target_angle = angle
 
-        # 控制
-        self.control(angle, self.target_dist_ema)
+        self.control(self.target_angle, self.target_dist_ema)
+
+    def _lost(self):
+        self.lock_counter = max(0, self.lock_counter - 1)
+        self.history.clear()
+        if self.locked and self.lock_counter == 0:
+            self.locked = False
+            rospy.loginfo("[Follow] 目标丢失")
+        self.cmd_pub.publish(Twist())
 
     def control(self, angle, dist):
         cmd = Twist()
