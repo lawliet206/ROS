@@ -185,8 +185,8 @@ void set_motor_raw(float left_f, float right_f) {
   if (left > 0) { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, HIGH); ledcWrite(PIN_L_PWM, left); } 
   else if (left < 0) { digitalWrite(PIN_L_IN1, HIGH); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, -left); } 
   else { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, 0); }
-  if (right > 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, right); } 
-  else if (right < 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(PIN_R_PWM, -right); } 
+  if (right > 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(PIN_R_PWM, right); } 
+  else if (right < 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, -right); } 
   else { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, 0); }
 }
 

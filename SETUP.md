@@ -183,6 +183,9 @@ rostopic list   # 应看到 /rosout 和 /rosout_agg
 | VCC | 3.3V | 逻辑供电 |
 | GND | GND | 共地 |
 
+> **电机方向说明：** 左右电机为镜像安装，固件中两个电机的 IN1/IN2 逻辑均已交换。
+> 即 `RPM>0` 前进时：IN1=LOW, IN2=HIGH。若下地后方向反，先检查 BO1/BO2 接线（红白方向），再调整固件。
+
 ### 4.3 编码器
 
 JGB37-520 6pin：M1-红, GND-黑, B-黄, A-绿, Vcc-蓝, M2-白

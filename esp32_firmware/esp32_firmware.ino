@@ -217,8 +217,8 @@ void set_motor_raw(float left_f, float right_f) {
   else { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, 0); }
   // 右轮: forward (right>0) → IN1=HIGH, IN2=LOW (与左轮反相, 因为电机镜像安装)
   // ⚠️ 实车验证: 推车前进看 /odom position.x 正负, 若为负则交换右轮 IN1/IN2 逻辑 (把 HIGH/LOW 互换)
-  if (right > 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, right); } 
-  else if (right < 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(PIN_R_PWM, -right); } 
+  if (right > 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(PIN_R_PWM, right); } 
+  else if (right < 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, -right); } 
   else { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, 0); }
 }
 
