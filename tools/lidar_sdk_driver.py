@@ -25,7 +25,7 @@ class S9Lidar:
         self.log_t = time.time()
         self.cross_n = 0
 
-        os.system(f"sudo chmod 666 {PORT} 2>/dev/null")
+        # 串口权限由 udev 规则管理 (见 SETUP.md 4.6)
         self.ser = serial.Serial(PORT, 115200, timeout=0.02)
         time.sleep(0.3)
         self.ser.reset_input_buffer()
@@ -134,5 +134,16 @@ class S9Lidar:
 
 if __name__ == "__main__":
     rospy.init_node('s9_lidar')
-    signal.signal(signal.SIGINT, lambda *_: sys.exit(0))
-    S9Lidar().run()
+    running = True
+    def on_sigint(sig, frame):
+        global running
+        running = False
+        rospy.signal_shutdown("SIGINT")
+    signal.signal(signal.SIGINT, on_sigint)
+    signal.signal(signal.SIGTERM, on_sigint)
+    lidar = S9Lidar()
+    try:
+        while not rospy.is_shutdown() and running:
+            lidar.run()
+    finally:
+        lidar.ser.close()

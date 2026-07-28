@@ -38,7 +38,8 @@
   </include>
 
   <!-- ============================================================ -->
-  <!-- 1.5 odom→base_footprint TF（ROS 必需，ESP32 不发 TF）         -->
+  <!-- 1.5 odom→base_footprint TF (ROS 必需, ESP32 不发 TF)             -->
+  <!--      同节点名天然防重复, slam/navigation 谁先启谁生效              -->
   <!-- ============================================================ -->
   <node name="ekf_localization" pkg="robot_localization"
         type="ekf_localization_node" output="screen">
@@ -111,10 +112,5 @@
     <!-- 变换发布延迟 -->
     <param name="transform_publish_period" value="0.05" />
   </node>
-
-  <rosparam>
-    <!-- 是否发布 map→odom 的 TF (通常让 AMCL 发布) -->
-    /slam_gmapping/tf_delay: 0.05
-  </rosparam>
 
 </launch>

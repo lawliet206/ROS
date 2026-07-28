@@ -9,7 +9,7 @@ set -e
 WS_DIR="$HOME/catkin_ws"
 ROS_DISTRO="noetic"
 
-echo "=== 编译 YDLIDAR 驱动 (ARM64) ==="
+echo "=== 编译 YDLIDAR 驱动 (x86_64) ==="
 
 # ---------- 1. 确保依赖 ----------
 sudo apt update

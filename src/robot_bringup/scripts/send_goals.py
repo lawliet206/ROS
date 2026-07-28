@@ -11,7 +11,7 @@ send_goals.py — move_base 多点导航 (巡点)
 
 使用方式:
   # 示例: 发送两个目标点
-  rosrun robot_bringup send_goals.py _goals:="[(1.0,2.0,0.0), (3.0,4.0,1.57)]"
+  rosrun robot_bringup send_goals.py _goals:="[[1.0,2.0,0.0], [3.0,4.0,1.57]]"
 
   或从 YAML 文件读取目标点:
   rosrun robot_bringup send_goals.py _goal_file:=/path/to/goals.yaml

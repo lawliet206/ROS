@@ -31,7 +31,7 @@ class LaserFollower:
         self.kp_linear  = 0.4
         self.kp_angular = 0.5
 
-        self.target_angle = 0.0
+        self.target_angle_ema = 0.0
         self.target_dist_ema = 0.0
         self.locked = False
         self.lock_counter = 0
@@ -115,16 +115,19 @@ class LaserFollower:
 
         if not self.locked and self.lock_counter >= self.min_lock_frames:
             self.locked = True
+            # 刚锁定时用当前值初始化 EMA，避免冷启动滞后
+            self.target_dist_ema  = dist
+            self.target_angle_ema = angle
             rospy.loginfo("[Follow] 锁定目标")
 
         if self.locked:
-            self.target_dist_ema = 0.4 * dist + 0.6 * self.target_dist_ema
-            self.target_angle = angle
+            self.target_dist_ema  = 0.4 * dist  + 0.6 * self.target_dist_ema
+            self.target_angle_ema = 0.4 * angle + 0.6 * self.target_angle_ema
         else:
-            self.target_dist_ema = dist
-            self.target_angle = angle
+            self.target_dist_ema  = dist
+            self.target_angle_ema = angle
 
-        self.control(self.target_angle, self.target_dist_ema)
+        self.control(self.target_angle_ema, self.target_dist_ema)
 
     def _lost(self):
         self.lock_counter = max(0, self.lock_counter - 1)

@@ -18,10 +18,12 @@ if not os.path.exists(PORT):
     print(f"❌ {PORT} 不存在")
     sys.exit(1)
 
-os.system(f"sudo chmod 666 {PORT} 2>/dev/null")
-time.sleep(0.2)
-
-ser = serial.Serial(PORT, 115200, timeout=0.1)
+# 串口权限由 udev 规则管理 (见 SETUP.md 4.6)
+try:
+    ser = serial.Serial(PORT, 115200, timeout=0.1)
+except serial.SerialException as e:
+    print(f"无法打开 {PORT}: {e}", file=sys.stderr)
+    sys.exit(1)
 time.sleep(0.5)
 ser.reset_input_buffer()
 

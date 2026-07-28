@@ -19,6 +19,14 @@
   <exec_depend>actionlib</exec_depend>
   <exec_depend>move_base_msgs</exec_depend>
   <exec_depend>robot_localization</exec_depend>
+  <exec_depend>rosserial_python</exec_depend>
+  <exec_depend>gmapping</exec_depend>
+  <exec_depend>amcl</exec_depend>
+  <exec_depend>move_base</exec_depend>
+  <exec_depend>map_server</exec_depend>
+  <exec_depend>topic_tools</exec_depend>
+  <exec_depend>teb_local_planner</exec_depend>
+  <exec_depend>tf2_geometry_msgs</exec_depend>
 
   <export>
   </export>

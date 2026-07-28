@@ -48,9 +48,12 @@ log_ts = time.time()
 pub_ts = time.time()
 
 # ── 串口 ──
-os.system(f"sudo chmod 666 {PORT} 2>/dev/null")
-time.sleep(0.1)
-ser = serial.Serial(PORT, 115200, timeout=0.03)
+try:
+    ser = serial.Serial(PORT, 115200, timeout=0.03)
+except serial.SerialException as e:
+    print(f"[LiDAR] 无法打开 {PORT}: {e}", file=sys.stderr, flush=True)
+    print("请检查: 1)雷达是否连接 2)udev 权限是否配置 3)是否被其他进程占用", file=sys.stderr, flush=True)
+    sys.exit(1)
 time.sleep(0.3)
 ser.reset_input_buffer()
 rospy.loginfo(f"[LiDAR] 串口 {PORT} 已打开 @ 115200")

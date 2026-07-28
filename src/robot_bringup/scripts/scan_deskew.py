@@ -17,6 +17,7 @@ scan_deskew.py — IMU 激光扫描去畸变
 """
 import rospy
 import math
+import threading
 from collections import deque
 from sensor_msgs.msg import LaserScan, Imu
 
@@ -25,6 +26,7 @@ class ScanDeskew:
     def __init__(self):
         # IMU 环形缓冲区 (~10s)
         self.imu_buf = deque(maxlen=500)
+        self._lock = threading.Lock()
         # 上一帧时间戳, 用于估算真实扫描周期
         self.last_stamp = 0.0
         self.scan_period = 0.17  # 初始估值, 会动态更新
@@ -36,20 +38,22 @@ class ScanDeskew:
         rospy.loginfo("[Deskew] 已启动")
 
     def imu_cb(self, msg):
-        self.imu_buf.append((msg.header.stamp.to_sec(),
-                             msg.angular_velocity.z))
+        with self._lock:
+            self.imu_buf.append((msg.header.stamp.to_sec(),
+                                 msg.angular_velocity.z))
 
     def _get_yaw_rate(self, t):
         """取时间 t 附近 IMU 角速度均值. 无数据返回 0."""
-        if not self.imu_buf:
-            return 0.0
-        # 取 ±50ms 窗口内的 IMU 读数, 取均值平滑
-        window = [w for ts, w in self.imu_buf if abs(ts - t) < 0.05]
-        if len(window) < 2:
-            # 窗口不够, 直接用最近值
-            best = min(self.imu_buf, key=lambda x: abs(x[0] - t))
-            return best[1] if abs(best[0] - t) < 0.1 else 0.0
-        return sum(window) / len(window)
+        with self._lock:
+            if not self.imu_buf:
+                return 0.0
+            # 取 ±50ms 窗口内的 IMU 读数, 取均值平滑
+            window = [w for ts, w in self.imu_buf if abs(ts - t) < 0.05]
+            if len(window) < 2:
+                # 窗口不够, 直接用最近值
+                best = min(self.imu_buf, key=lambda x: abs(x[0] - t))
+                return best[1] if abs(best[0] - t) < 0.1 else 0.0
+            return sum(window) / len(window)
 
     def scan_cb(self, scan):
         N = len(scan.ranges)

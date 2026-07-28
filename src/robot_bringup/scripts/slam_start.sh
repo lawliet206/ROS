@@ -23,8 +23,19 @@ echo "========================================"
 # ---- 配置 ----
 ROS_WS="$HOME/ROS"
 
-# 获取本机 IP (树莓派需要设 ROS_MASTER_URI=http://本机IP:11311)
-MY_IP=$(hostname -I | awk '{print $1}')
+# 获取本机 IP (优先取 wlan0/eth0 对应的 IP, 跳过 docker/lo/虚拟网卡)
+get_my_ip() {
+    for iface in wlan0 eth0 enp0s3 enp0s8; do
+        local ip=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+        if [ -n "$ip" ]; then
+            echo "$ip"
+            return
+        fi
+    done
+    # fallback: hostname -I 第一个
+    hostname -I | awk '{print $1}'
+}
+MY_IP=$(get_my_ip)
 export ROS_MASTER_URI="http://${MY_IP}:11311"
 export ROS_IP="${MY_IP}"
 
@@ -45,6 +56,25 @@ fi
 echo ""
 echo "[INFO] 本机 IP: ${MY_IP}"
 echo "[INFO] J1900 需设置: export ROS_MASTER_URI=http://${MY_IP}:11311"
+echo ""
+
+# 等待 J1900 端关键话题 (超时 60s)
+echo "[WAIT] 等待 J1900 话题就绪..."
+for topic in /odom /scan; do
+    waited=0
+    while ! rostopic list 2>/dev/null | grep -qx "$topic"; do
+        sleep 1; waited=$((waited + 1))
+        if [ $waited -ge 60 ]; then
+            echo "[ERROR] 超时: 话题 $topic 未出现. 请确认 J1900 上已启动:"
+            echo "  rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800"
+            echo "  rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1"
+            exit 1
+        fi
+        echo -n "."
+    done
+    echo " OK ($topic)"
+done
+
 echo ""
 echo "========================================"
 echo "  操作提示:"

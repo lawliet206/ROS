@@ -56,7 +56,7 @@
     <param name="global_costmap/track_unknown_space" value="false"/>
     <param name="global_costmap/resolution" value="0.05"/>
 
-    <rosparam param="global_costmap/footprint">[[-0.10,-0.11],[-0.10,0.11],[0.10,0.11],[0.10,-0.11]]</rosparam>
+    <rosparam param="global_costmap/footprint">[[-0.15,-0.125],[-0.15,0.125],[0.15,0.125],[0.15,-0.125]]</rosparam>
     <param name="global_costmap/footprint_padding" value="0.01"/>
 
     <rosparam param="global_costmap/plugins">
@@ -74,7 +74,7 @@
     <param name="local_costmap/height" value="4.0"/>
     <param name="local_costmap/resolution" value="0.05"/>
 
-    <rosparam param="local_costmap/footprint">[[-0.10,-0.11],[-0.10,0.11],[0.10,0.11],[0.10,-0.11]]</rosparam>
+    <rosparam param="local_costmap/footprint">[[-0.15,-0.125],[-0.15,0.125],[0.15,0.125],[0.15,-0.125]]</rosparam>
     <param name="local_costmap/footprint_padding" value="0.01"/>
 
     <rosparam param="local_costmap/plugins">

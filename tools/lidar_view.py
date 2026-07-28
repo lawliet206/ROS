@@ -40,8 +40,7 @@ if not os.path.exists(PORT):
     sys.exit(1)
 
 try:
-    os.system(f"sudo chmod 666 {PORT} 2>/dev/null")
-    time.sleep(0.1)
+    # 串口权限由 udev 规则管理 (见 SETUP.md 4.6)
     ser = serial.Serial(PORT, 115200, timeout=0.03)
     time.sleep(0.3)
     ser.reset_input_buffer()
@@ -137,8 +136,10 @@ def read_serial():
             stats['frame_count'] += 1
             try:
                 parse_frame(frame)
-            except Exception:
-                pass
+            except Exception as e:
+                stats['parse_errors'] = stats.get('parse_errors', 0) + 1
+                if stats['parse_errors'] <= 3:
+                    print(f"[warn] 帧解析错误 (#{stats['parse_errors']}): {e}", file=sys.stderr)
             parse_count += 1
         else:
             break

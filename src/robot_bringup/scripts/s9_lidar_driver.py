@@ -52,11 +52,8 @@ class S9LidarDriver:
 
         self.scan_pub = rospy.Publisher("/scan", LaserScan, queue_size=3)
 
-        # 打开串口
+        # 打开串口 (权限由 udev 规则管理, SETUP.md 4.6)
         try:
-            import os
-            os.system(f"sudo chmod 666 {port} 2>/dev/null")
-            time.sleep(0.2)
             self.ser = serial.Serial(port, 115200, timeout=0.02)
             rospy.loginfo("[S9] %s @ 115200 | cross=%ddeg", port, CROSS_HI)
         except serial.SerialException as e:

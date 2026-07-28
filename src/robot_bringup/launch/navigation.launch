@@ -4,10 +4,11 @@
   功能: 加载已有地图 + AMCL 定位 + move_base 路径规划
 
   使用:
-    roslaunch robot_bringup navigation.launch map_file:=/home/user/maps/my_map.yaml
+    roslaunch robot_bringup navigation.launch map_file:=~/maps/my_map.yaml
+    (通过 nav_start.sh 自动传入, 不传则 map_server 启动失败)
 
   然后发送目标点:
-    rosrun robot_bringup send_goals.py _goals:="[(1,2,0), (3,4,1.57)]"
+    rosrun robot_bringup send_goals.py _goals:="[[1,2,0], [3,4,1.57]]"
 
   或在 RViz 中用 "2D Nav Goal" 工具点击目标
 
@@ -35,7 +36,8 @@
   </include>
 
   <!-- ============================================================ -->
-  <!-- 1.5 odom→base_footprint TF（ROS 必需，ESP32 不发 TF）         -->
+  <!-- 1.5 odom→base_footprint TF (ROS 必需, ESP32 不发 TF)             -->
+  <!--      同节点名天然防重复, slam/navigation 谁先启谁生效              -->
   <!-- ============================================================ -->
   <node name="ekf_localization" pkg="robot_localization"
         type="ekf_localization_node" output="screen">
@@ -158,7 +160,7 @@
     <param name="global_costmap/rolling_window"      value="false" />
     <param name="global_costmap/resolution"          value="0.05" />
 
-    <rosparam param="global_costmap/footprint">[[-0.10,-0.11],[-0.10,0.11],[0.10,0.11],[0.10,-0.11]]</rosparam>
+    <rosparam param="global_costmap/footprint">[[-0.15,-0.125],[-0.15,0.125],[0.15,0.125],[0.15,-0.125]]</rosparam>
     <param name="global_costmap/footprint_padding" value="0.01"/>
 
     <rosparam param="global_costmap/plugins">
@@ -178,7 +180,7 @@
     <param name="local_costmap/height"               value="4.0" />
     <param name="local_costmap/resolution"           value="0.05" />
 
-    <rosparam param="local_costmap/footprint">[[-0.10,-0.11],[-0.10,0.11],[0.10,0.11],[0.10,-0.11]]</rosparam>
+    <rosparam param="local_costmap/footprint">[[-0.15,-0.125],[-0.15,0.125],[0.15,0.125],[0.15,-0.125]]</rosparam>
     <param name="local_costmap/footprint_padding" value="0.01"/>
 
     <rosparam param="local_costmap/plugins">

@@ -10,9 +10,12 @@ import serial
 
 FRAME_HEADER = b'\xAA\x55'
 PORT = sys.argv[1] if len(sys.argv) > 1 else '/dev/ttyUSB0'
-os.system(f"sudo chmod 666 {PORT} 2>/dev/null")
 
-ser = serial.Serial(PORT, 115200, timeout=0.02)
+try:
+    ser = serial.Serial(PORT, 115200, timeout=0.02)
+except serial.SerialException as e:
+    print(f"无法打开串口 {PORT}: {e}", file=sys.stderr)
+    sys.exit(1)
 time.sleep(0.3)
 ser.reset_input_buffer()
 

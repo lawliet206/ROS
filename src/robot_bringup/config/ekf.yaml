@@ -16,20 +16,20 @@ world_frame: odom
 # --- 里程计输入 ---
 odom0: /odom
 odom0_config:
-  [true,  true,  false,    # x, y, z
+  [true,  false, false,    # x, y, z (差速车 y 不可移动, false 降噪声)
    false, false, true,     # roll, pitch, yaw
    true,  false, false,    # vx, vy, vz
    false, false, true,     # vroll, vpitch, vyaw
    false, false, false]    # ax, ay, az
 
-# --- IMU 输入 (MPU6050: Y=车头, X=右, Z=上) ---
+# --- IMU 输入 (MPU6050: 固件已旋转到 base_link 帧, X=前进, Y=左, Z=上) ---
 imu0: /imu
 imu0_config:
   [false, false, false,    # x, y, z
    false, false, false,    # roll, pitch, yaw
-   false, false, false,    # vx, vy, vz
-   false, false, true,     # vroll, vpitch, vyaw
-    false, true,  false]    # ax, ay, az (ay=车头前进, 因 IMU Y 轴朝前)
+   false, false, false,    # vx, vy, vz (线速度, IMU 不测)
+   false, false, true,     # vroll, vpitch, vyaw (vyaw=偏航角速度)
+    true, false, false]    # ax, ay, az (ax=前进加速度)
 
 # 差分模式下的位姿预测
 differential: false

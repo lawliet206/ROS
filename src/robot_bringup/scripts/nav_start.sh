@@ -15,7 +15,7 @@
 #
 # 启动后发送导航目标:
 #   方式A: RViz 中用 "2D Nav Goal" 点击
-#   方式B: rosrun robot_bringup send_goals.py _goals:="[(1,2,0),(3,4,1.57)]"
+#   方式B: rosrun robot_bringup send_goals.py _goals:="[[1,2,0],[3,4,1.57]]"
 # ============================================================
 
 set -e
@@ -42,7 +42,14 @@ echo "========================================"
 # ---- 配置 ----
 ROS_WS="$HOME/ROS"
 
-MY_IP=$(hostname -I | awk '{print $1}')
+get_my_ip() {
+    for iface in wlan0 eth0 enp0s3 enp0s8; do
+        local ip=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP '(?<=inet\s)\d+(\.\d+){3}')
+        if [ -n "$ip" ]; then echo "$ip"; return; fi
+    done
+    hostname -I | awk '{print $1}'
+}
+MY_IP=$(get_my_ip)
 export ROS_MASTER_URI="http://${MY_IP}:11311"
 export ROS_IP="${MY_IP}"
 
@@ -60,6 +67,28 @@ if ! rostopic list > /dev/null 2>&1; then
 fi
 
 echo "[INFO] 本机 IP: ${MY_IP}"
+
+# cmd_vel 冲突检测: 导航与跟随不能同时跑
+if rostopic info /cmd_vel 2>/dev/null | grep -q "laser_follower"; then
+    echo "[WARN] 检测到 laser_follower 正在发布 /cmd_vel"
+    echo "[WARN] 导航和跟随不能同时运行 —— 两者都会写 /cmd_vel"
+    echo "[WARN] 请先停止跟随: rosnode kill /laser_follower"
+fi
+
+# 等待关键话题
+echo "[WAIT] 等待 J1900 话题就绪..."
+for topic in /odom /scan; do
+    waited=0
+    while ! rostopic list 2>/dev/null | grep -qx "$topic"; do
+        sleep 1; waited=$((waited + 1))
+        if [ $waited -ge 60 ]; then
+            echo "[ERROR] 超时: $topic 未出现. 请确认 J1900 已启动 rosserial + 雷达"
+            exit 1
+        fi
+        echo -n "."
+    done
+    echo " OK ($topic)"
+done
 
 roslaunch robot_bringup navigation.launch \
     map_file:="${MAP_FILE}" \

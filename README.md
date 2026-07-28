@@ -85,8 +85,6 @@ roslaunch robot_bringup slam.launch start_lidar:=false
 
 ### 激光人体跟随
 
-### 激光人体跟随
-
 ```bash
 roslaunch robot_bringup follow.launch
 ```
@@ -110,7 +108,7 @@ roslaunch robot_bringup ekf.launch
 - ✅ 电机驱动从 BTS7960 → TB6612FNG（更便宜，3.3V 直连）
 - ✅ 上位机从电视盒(Armbian) → J1900(x86_64)
 - ✅ S9 雷达驱动完成（累积 360° 扫描，5Hz 发布）
-- ✅ 导航参数已调优（TEB 规划器，max_vel_x=2.5）
+- ✅ 导航参数已调优（TEB 规划器，max_vel_x=0.6）
 
 ### 未解决
 - ❌ 导航路径有时绕远路（navfn 全局规划问题）

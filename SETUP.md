@@ -14,7 +14,7 @@
   - [4.3 编码器](#43-编码器)
   - [4.4 MPU6050 IMU](#44-mpu6050-imu)
   - [4.5 电池电压检测](#45-电池电压检测)
-  - [4.7 串口权限](#47-串口权限)
+  - [4.6 串口权限](#46-串口权限)
 - [5. 首次上电](#5-首次上电安全流程)
 - [6. 仿真操作](#6-仿真操作pc-单机)
   - [6.1 SLAM 建图](#61-slam-建图)
@@ -24,6 +24,8 @@
   - [7.1 SLAM 建图](#71-slam-建图)
   - [7.2 多点导航](#72-多点导航)
   - [7.3 人体跟随](#73-人体跟随)
+  - [7.4 腿跟踪测试](#74-腿跟踪测试leg_tracker)
+  - [7.5 EKF 传感器融合](#75-ekf-传感器融合可选)
 - [8. 快速参考](#8-快速参考)
 - [9. 常见问题](#9-常见问题)
 
@@ -92,8 +94,14 @@ sudo apt install ros-noetic-rosserial-python
 pip3 install pyserial pyyaml
 
 # 3. 从 PC 迁移工作空间
+# 先在两台机器上查看 IP:
+#   hostname -I
+# 然后设置环境变量 (以下为示例，请替换为实际 IP):
+#   export PC_IP=192.168.1.118
+#   export J1900_IP=192.168.1.200
+#
 # PC 上执行:
-#   scp -r ~/ROS lawliet@<J1900_IP>:~/
+#   scp -r ~/ROS lawliet@${J1900_IP}:~/
 # J1900 上:
 cd ~/ROS && source /opt/ros/noetic/setup.bash && catkin_make
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
@@ -117,7 +125,9 @@ Arduino IDE 打开 `esp32_firmware/esp32_firmware.ino`：
 ```bash
 # 两台机器都执行
 hostname -I
-# 假设: PC=192.168.1.118  J1900=192.168.1.200
+# 记录两台 IP，设置环境变量 (以下为示例):
+export PC_IP=192.168.1.118
+export J1900_IP=192.168.1.200
 ```
 
 ### 3.2 SSH 免密登录
@@ -125,22 +135,22 @@ hostname -I
 ```bash
 # PC 上执行 (只需一次)
 ssh-keygen -t rsa -b 4096 -N "" -f ~/.ssh/id_rsa
-ssh-copy-id lawliet@192.168.1.200   # 输入 J1900 密码
+ssh-copy-id lawliet@${J1900_IP}   # 输入 J1900 密码
 
 # 测试
-ssh lawliet@192.168.1.200 "echo ssh ok"
+ssh lawliet@${J1900_IP} "echo ssh ok"
 ```
 
 ### 3.3 设置 ROS 主从
 
 ```bash
 # ========== PC (~/.bashrc 末尾添加) ==========
-export ROS_MASTER_URI=http://192.168.1.118:11311   # PC 是 Master
-export ROS_IP=192.168.1.118
+export ROS_MASTER_URI=http://${PC_IP}:11311   # PC 是 Master
+export ROS_IP=${PC_IP}
 
 # ========== J1900 (~/.bashrc 末尾添加) ==========
-export ROS_MASTER_URI=http://192.168.1.118:11311   # 指向 PC
-export ROS_IP=192.168.1.200
+export ROS_MASTER_URI=http://${PC_IP}:11311   # 指向 PC
+export ROS_IP=${J1900_IP}
 
 # 两台都 source 一下让配置生效
 source ~/.bashrc
@@ -308,8 +318,10 @@ bash ~/ROS/src/robot_sim/scripts/sim_follow.sh
 | 1 | PC | `roscore` |
 | 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
 | 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
-| 4 | PC | `roslaunch robot_bringup slam.launch start_lidar:=false` |
-| 5 | PC | `rosrun teleop_twist_keyboard teleop_twist_keyboard.py`（键盘 `i` 前进 `k` 停） |
+| 4 | PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` |
+| 5 | PC | `rosrun teleop_twist_keyboard teleop_twist_keyboard.py`（i 前进 k 停） |
+
+> **自动保护**: slam_start.sh 会等待 `/odom` + `/scan` 就绪(60s超时)，再启动 SLAM。
 
 保存地图：
 ```bash
@@ -357,6 +369,21 @@ rosrun map_server map_saver -f ~/maps/lab_map
 
 ---
 
+### 7.5 EKF 传感器融合（已内置，自动启动）
+
+EKF 融合 ESP32 的 `/odom`（编码器）和 `/imu`（MPU6050），输出 `/odometry/filtered`。
+
+**已内置在 `slam.launch` / `navigation.launch` 内**，无需手动启动。
+同节点名 `ekf_localization` 天然防重复 — 谁先启谁生效。
+
+如需单独调试：
+```bash
+roslaunch robot_bringup ekf.launch
+rostopic echo /odometry/filtered -n1
+```
+
+---
+
 ## 8. 快速参考
 
 > 卡住/报错时先清理残留：`bash ~/ROS/tools/kill_ros.sh`
@@ -373,13 +400,24 @@ rosrun map_server map_saver -f ~/maps/lab_map
 
 | 在哪 | 命令 | 功能 |
 |------|------|------|
-| J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` | ESP32 |
+| J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` | ESP32 桥接 |
 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` | 激光雷达 |
-| PC | `roslaunch robot_bringup slam.launch start_lidar:=false` | SLAM 建图 |
+| PC | `roslaunch robot_bringup ekf.launch` | EKF 传感器融合 (单独调试用) |
+| PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` | SLAM 建图 (自动等话题) |
 | PC | `rosrun map_server map_saver -f ~/maps/lab_map` | 保存地图 |
-| PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` | 导航 |
-| PC | `roslaunch robot_bringup follow.launch` | 激光跟随 |
+| PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` | 导航 (自动等话题+冲突检测) |
+| PC | `roslaunch robot_bringup follow.launch start_lidar:=false` | 激光跟随 |
 | PC | `roslaunch leg_tracker joint_leg_tracker.launch scan:=/scan fixed_frame:=laser_link` | 腿跟踪 |
+
+---
+
+### 各设备任务速查
+
+| 设备 | 负责任务 |
+|------|---------|
+| **ESP32** | 电机 PID、编码器 PCNT、MPU6050 IMU、里程计计算、rosserial 发布 `/odom` `/imu`、订阅 `/cmd_vel` |
+| **J1900** | rosserial 桥接 (`serial_node`)、激光雷达驱动 (`s9_lidar_driver.py`) |
+| **PC** | roscore (Master)、SLAM (`gmapping`)、导航 (`amcl` + `move_base`)、EKF 融合 (`ekf.launch`)、巡点 (`send_goals.py`)、仿真 (`Gazebo`)、可视化 (`RViz`) |
 
 ---
 
@@ -392,3 +430,5 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | J1900 连不上 PC | 互 ping，确认 ROS_MASTER_URI / ROS_IP 指向 PC |
 | rosrun/roslaunch 报 package not found | `source ~/ROS/devel/setup.bash`（每个新终端都要执行一次） |
 | Gazebo 打不开 | `export SVGA_VGPU10=0` |
+| slam_start.sh 卡在"等待话题" | J1900 上的 rosserial 或雷达驱动未启动，检查 J1900 终端 |
+| 导航和跟随能同时跑吗 | **不能** — 两者都写 `/cmd_vel`，会抢控。nav_start.sh 启动时会自动检测并警告 |

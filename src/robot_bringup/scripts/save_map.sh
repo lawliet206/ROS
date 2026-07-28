@@ -1,7 +1,10 @@
 #!/bin/bash
+set -e
 # ============================================================
 # save_map.sh — 保存 SLAM 地图
 # ============================================================
+source /opt/ros/noetic/setup.bash
+source "$HOME/ROS/devel/setup.bash" 2>/dev/null || true
 # 使用: bash save_map.sh <地图名>
 # 示例: bash save_map.sh lab_1f
 #       地图将保存到 ~/maps/lab_1f.yaml + lab_1f.pgm

@@ -10,11 +10,18 @@
 
   <exec_depend>gazebo_ros</exec_depend>
   <exec_depend>gazebo_plugins</exec_depend>
+  <exec_depend>rospy</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>joint_state_publisher</exec_depend>
   <exec_depend>gmapping</exec_depend>
   <exec_depend>move_base</exec_depend>
   <exec_depend>amcl</exec_depend>
   <exec_depend>map_server</exec_depend>
+  <exec_depend>topic_tools</exec_depend>
+  <exec_depend>teb_local_planner</exec_depend>
+  <exec_depend>tf</exec_depend>
+  <exec_depend>tf2_ros</exec_depend>
+  <exec_depend>teleop_twist_keyboard</exec_depend>
 
   <export>
   </export>

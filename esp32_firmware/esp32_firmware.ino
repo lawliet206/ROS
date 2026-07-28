@@ -215,8 +215,7 @@ void set_motor_raw(float left_f, float right_f) {
   if (left > 0) { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, HIGH); ledcWrite(PIN_L_PWM, left); } 
   else if (left < 0) { digitalWrite(PIN_L_IN1, HIGH); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, -left); } 
   else { digitalWrite(PIN_L_IN1, LOW); digitalWrite(PIN_L_IN2, LOW); ledcWrite(PIN_L_PWM, 0); }
-  // 右轮: forward (right>0) → IN1=HIGH, IN2=LOW (与左轮反相, 因为电机镜像安装)
-  // ⚠️ 实车验证: 推车前进看 /odom position.x 正负, 若为负则交换右轮 IN1/IN2 逻辑 (把 HIGH/LOW 互换)
+  // 右轮: forward (right>0) → IN1=LOW, IN2=HIGH (与左轮相同, commit d3aec66 已交换接线)
   if (right > 0) { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, HIGH); ledcWrite(PIN_R_PWM, right); } 
   else if (right < 0) { digitalWrite(PIN_R_IN1, HIGH); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, -right); } 
   else { digitalWrite(PIN_R_IN1, LOW); digitalWrite(PIN_R_IN2, LOW); ledcWrite(PIN_R_PWM, 0); }
@@ -336,7 +335,7 @@ void calibrate_imu() {
     imu_calibrated = true;
     read_imu();
     if (imu_data_valid) {
-      cf_roll = atan2(-imu_ay, -imu_az);
+      cf_roll  = atan2(-imu_ay,  imu_az);
       cf_pitch = atan2(imu_ax, sqrt(imu_ay * imu_ay + imu_az * imu_az));
     }
   } else {
@@ -552,8 +551,8 @@ void loop() {
     float gx = fabs(imu_gx) > GYRO_DEADBAND ? imu_gx : 0;
     float gy = fabs(imu_gy) > GYRO_DEADBAND ? imu_gy : 0;
     float gz = fabs(imu_gz) > GYRO_DEADBAND ? imu_gz : 0;
-    float accel_roll = atan2(-imu_ay, -imu_az);
-    float accel_pitch = atan2(imu_ax, sqrt(imu_ay * imu_ay + imu_az * imu_az));
+    float accel_roll  = atan2(-imu_ay,  imu_az);                                  // Roll: 绕 X=右轴, YZ 平面
+    float accel_pitch = atan2( imu_ax, sqrt(imu_ay * imu_ay + imu_az * imu_az));  // Pitch: 绕 Y=前进轴, XZ 平面
     if (dt_valid) {
       cf_roll = COMP_GAIN * (cf_roll + gx * dt) + (1.0f - COMP_GAIN) * accel_roll;
       cf_pitch = COMP_GAIN * (cf_pitch + gy * dt) + (1.0f - COMP_GAIN) * accel_pitch;
@@ -591,13 +590,16 @@ void loop() {
 
   if (imu_data_valid) {
     imu_msg.header.stamp = nh.now();
-    imu_msg.header.frame_id = "imu_link";
-    imu_msg.linear_acceleration.x = imu_ax;
-    imu_msg.linear_acceleration.y = imu_ay;
-    imu_msg.linear_acceleration.z = imu_az;
-    imu_msg.angular_velocity.x = imu_gx;
-    imu_msg.angular_velocity.y = imu_gy;
-    imu_msg.angular_velocity.z = imu_gz;
+    imu_msg.header.frame_id = "base_link";
+
+    // 旋转 IMU 数据到 base_link 帧 (R_z(π/2): imu→base)
+    // imu_link: X=右, Y=前进, Z=上  →  base_link: X=前进, Y=左, Z=上
+    imu_msg.linear_acceleration.x = -imu_ay;   // 前进 = -(imu Y=前进→后?)
+    imu_msg.linear_acceleration.y =  imu_ax;   // 左 = imu X=右→左
+    imu_msg.linear_acceleration.z =  imu_az;
+    imu_msg.angular_velocity.x = -imu_gy;
+    imu_msg.angular_velocity.y =  imu_gx;
+    imu_msg.angular_velocity.z =  imu_gz;
 
     float half_roll = cf_roll * 0.5f;
     float half_pitch = cf_pitch * 0.5f;
