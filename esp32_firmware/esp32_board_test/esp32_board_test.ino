@@ -52,7 +52,7 @@
 
 #define STALL_DETECT_PWM_THRESH  1023.0f
 #define STALL_DETECT_RPM_THRESH  1.0f
-#define STALL_DETECT_TIME_MS     99999
+#define STALL_DETECT_TIME_MS     2000
 
 struct PIDState { 
   float kp, ki, kd;

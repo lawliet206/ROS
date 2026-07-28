@@ -66,7 +66,7 @@
 // 触发后该侧电机切断 PWM, 等 target_rpm 降回 1 以下自动恢复
 #define STALL_DETECT_PWM_THRESH  1023.0f        // [可调] 堵转判定 PWM 阈值. 放宽松不易误判
 #define STALL_DETECT_RPM_THRESH  1.0f           // [可调] 堵转判定 RPM 阈值. RPM 降到 1 以下才算堵转
-#define STALL_DETECT_TIME_MS     99999          // [可调] 堵转确认时间 (ms). 几乎禁用, 避免过坎误判
+#define STALL_DETECT_TIME_MS     2000           // [可调] 堵转确认时间 (ms). 持续 2 秒真堵转才停, 过坎不会误判
 
 ros::NodeHandle nh;
 
