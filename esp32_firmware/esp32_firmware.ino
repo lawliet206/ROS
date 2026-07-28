@@ -49,11 +49,11 @@
 // PID 输出 = Kp*error + Ki*∫error*dt + Kd*d(measurement)/dt
 // 微分项算在测量值上 (不是误差), 避免设定值突变时产生过冲
 // 调参顺序: 先只调 Kp 让车轮跟得上设定转速, 再加 Ki 消除稳态误差, 最后加少量 Kd 抑制震荡
-#define MAX_RAMP_RPM_PER_SEC  300.0f          // [可调] RPM 斜坡限制 (RPM/s). 类似加速度限制, 防止电机电流突变. 300 对应约 1.3m/s² 线加速度. 车重或电池弱时降低
+#define MAX_RAMP_RPM_PER_SEC  100.0f          // [可调] RPM 斜坡限制 (RPM/s). 降低到 100 使起步更平缓安全
 #define RPM_FILTER_ALPHA      0.3f            // [可调] 转速低通滤波 α (0~1). 越小越平滑但响应越慢. 0.3 是默认. 高速场景需要更快响应时可加大到 0.5, 但 RPM 读数会更抖
 #define RPM_STOP_THRESHOLD    1.0f            // [可调] 停止判定 RPM 阈值. 低于此值认为电机已停, PID 复位. 设太大电机会一直微动, 太小则停下来后还有残余 PWM
-#define PID_INTEGRAL_LIMIT    500.0f          // [可调] PID 积分上限. 限制积分项不会无限累积 (抗积分饱和). 过大 → 积分失控, 过小 → 稳态误差清不掉
-#define MAX_CMD_RPM           600.0f          // [可调] 最大允许 RPM (轮子转速, 不是电机转速!). 600 RPM 轮子 = 600/10=60 电机 RPM? 不对: 轮子 RPM = 电机 RPM/减速比. 600 RPM 轮子 × 0.267m/转 ≈ 2.7m/s 理论最大. JGB37-520 实际带载跑不到这么高
+#define PID_INTEGRAL_LIMIT    2000.0f         // [可调] PID 积分上限. 限制积分项不会无限累积 (抗积分饱和). 过大 → 积分失控, 过小 → 稳态误差清不掉
+#define MAX_CMD_RPM           200.0f          // [可调] 最大允许 RPM. 200 RPM ≈ 0.89 m/s, 安全测试速度
 #define MIN_START_PWM         150.0f          // [可调] 启动死区 PWM (0~1023). TB6612 在极低 PWM 时电机不转, 需要最小值克服静摩擦力. 太小起步抖, 太大起步冲. sqrt 平滑过渡避免突然窜出
 #define PID_OUTPUT_LIMIT      1023.0f         // [可调] PID 输出上限. 10bit PWM 最大 1023. 小于此值可限制最大功率, 保护电机或省电
 
@@ -64,9 +64,9 @@
 // ========== 堵转检测 ==========
 // 判定条件: PWM 已给到很高 (STALL_DETECT_PWM_THRESH) 但 RPM 几乎为零 (STALL_DETECT_RPM_THRESH) 持续超过 STALL_DETECT_TIME_MS
 // 触发后该侧电机切断 PWM, 等 target_rpm 降回 1 以下自动恢复
-#define STALL_DETECT_PWM_THRESH  800.0f         // [可调] 堵转判定 PWM 阈值 (0~1023). 到这么大 PWM 还不转, 基本卡住了. 设太低容易误判, 太高真堵转时检测不到
-#define STALL_DETECT_RPM_THRESH  5.0f           // [可调] 堵转判定 RPM 阈值. 低于此值 + PWM 超阈值 = 堵转. 设太高正常运行就误判, 太低堵转难检测
-#define STALL_DETECT_TIME_MS     500            // [可调] 堵转确认时间 (ms). 持续堵转这么久才判定. 设太短过个坎就误判, 太长堵转时烧电机
+#define STALL_DETECT_PWM_THRESH  1023.0f        // [可调] 堵转判定 PWM 阈值. 放宽松不易误判
+#define STALL_DETECT_RPM_THRESH  1.0f           // [可调] 堵转判定 RPM 阈值. RPM 降到 1 以下才算堵转
+#define STALL_DETECT_TIME_MS     99999          // [可调] 堵转确认时间 (ms). 几乎禁用, 避免过坎误判
 
 ros::NodeHandle nh;
 

@@ -39,20 +39,20 @@
 #define ENC_LEFT_DIR       1
 #define ENC_RIGHT_DIR      -1
 
-#define MAX_RAMP_RPM_PER_SEC  300.0f  
+#define MAX_RAMP_RPM_PER_SEC  100.0f  
 #define RPM_FILTER_ALPHA      0.3f    
 #define RPM_STOP_THRESHOLD    1.0f    
-#define PID_INTEGRAL_LIMIT    500.0f  
-#define MAX_CMD_RPM           600.0f  
+#define PID_INTEGRAL_LIMIT    2000.0f  
+#define MAX_CMD_RPM           200.0f  
 #define MIN_START_PWM         150.0f  
 #define PID_OUTPUT_LIMIT      1023.0f 
 
 #define LOOP_INTERVAL_US  10000
-#define WATCHDOG_TIMEOUT  500
+#define WATCHDOG_TIMEOUT  30000
 
-#define STALL_DETECT_PWM_THRESH  800.0f
-#define STALL_DETECT_RPM_THRESH  5.0f
-#define STALL_DETECT_TIME_MS     500
+#define STALL_DETECT_PWM_THRESH  1023.0f
+#define STALL_DETECT_RPM_THRESH  1.0f
+#define STALL_DETECT_TIME_MS     99999
 
 struct PIDState { 
   float kp, ki, kd;
@@ -69,6 +69,8 @@ float target_rpm_left_filtered  = 0;
 float target_rpm_right_filtered = 0;
 float actual_rpm_left  = 0;
 float actual_rpm_right = 0;
+float last_pwm_left = 0;
+float last_pwm_right = 0;
 
 float odom_x = 0;
 float odom_y = 0;
@@ -413,6 +415,16 @@ void processSerialCommands() {
   }
 }
 
+void print_encoder_raw() {
+  int16_t cnt0 = 0, cnt1 = 0;
+  pcnt_get_counter_value(PCNT_UNIT_0, &cnt0);
+  pcnt_get_counter_value(PCNT_UNIT_1, &cnt1);
+  Serial.print("  ENC raw L:");
+  Serial.print(cnt0);
+  Serial.print(" R:");
+  Serial.print(cnt1);
+}
+
 void setup() {
   Serial.setRxBufferSize(1024);
   Serial.setTxBufferSize(1024);
@@ -436,6 +448,16 @@ void setup() {
   
   calibrate_imu();
   for (int i = 0; i < 50; i++) { read_imu(); delay(5); }
+
+  // 编码器检查
+  int16_t ecnt0 = 0, ecnt1 = 0;
+  pcnt_get_counter_value(PCNT_UNIT_0, &ecnt0);
+  pcnt_get_counter_value(PCNT_UNIT_1, &ecnt1);
+  Serial.print("Encoder init check - L:");
+  Serial.print(ecnt0);
+  Serial.print(" R:");
+  Serial.println(ecnt1);
+  Serial.println("手转左轮看 L 变不变，转右轮看 R 变不变");
   
   last_loop_us = esp_timer_get_time();
   prev_exec_us = last_loop_us;
@@ -496,17 +518,17 @@ void loop() {
     if (fabs(target_rpm_left_filtered) > 0.01f || fabs(target_rpm_right_filtered) > 0.01f || 
         fabs(actual_rpm_left) > RPM_STOP_THRESHOLD || fabs(actual_rpm_right) > RPM_STOP_THRESHOLD) {
       
-      float pwm_left = 0, pwm_right = 0;
+      last_pwm_left = 0; last_pwm_right = 0;
       if (!stall_fault_l) {
-        pwm_left = pid_compute(pid_left, target_rpm_left_filtered, actual_rpm_left, dt);
-        pwm_left = apply_deadzone_ff(pwm_left);
+        last_pwm_left = pid_compute(pid_left, target_rpm_left_filtered, actual_rpm_left, dt);
+        last_pwm_left = apply_deadzone_ff(last_pwm_left);
       }
       if (!stall_fault_r) {
-        pwm_right = pid_compute(pid_right, target_rpm_right_filtered, actual_rpm_right, dt);
-        pwm_right = apply_deadzone_ff(pwm_right);
+        last_pwm_right = pid_compute(pid_right, target_rpm_right_filtered, actual_rpm_right, dt);
+        last_pwm_right = apply_deadzone_ff(last_pwm_right);
       }
 
-      if (fabs(pwm_left) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_left) < STALL_DETECT_RPM_THRESH
+      if (fabs(last_pwm_left) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_left) < STALL_DETECT_RPM_THRESH
           && fabs(target_rpm_left_filtered) > 20.0f) {
         if (stall_timer_start_l == 0) stall_timer_start_l = millis();
         else if (millis() - stall_timer_start_l > STALL_DETECT_TIME_MS) {
@@ -518,7 +540,7 @@ void loop() {
         }
       } else { stall_timer_start_l = 0; }
       
-      if (fabs(pwm_right) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_right) < STALL_DETECT_RPM_THRESH
+      if (fabs(last_pwm_right) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_right) < STALL_DETECT_RPM_THRESH
           && fabs(target_rpm_right_filtered) > 20.0f) {
         if (stall_timer_start_r == 0) stall_timer_start_r = millis();
         else if (millis() - stall_timer_start_r > STALL_DETECT_TIME_MS) {
@@ -530,12 +552,14 @@ void loop() {
         }
       } else { stall_timer_start_r = 0; }
       
-      set_motor_raw(pwm_left, pwm_right);
+      set_motor_raw(last_pwm_left, last_pwm_right);
     } else {
       pid_reset(pid_left); pid_reset(pid_right);
+      last_pwm_left = 0; last_pwm_right = 0;
       set_motor_raw(0, 0);
     }
   } else {
+    last_pwm_left = 0; last_pwm_right = 0;
     set_motor_raw(0, 0);
     pid_reset(pid_left);
     pid_reset(pid_right);
@@ -556,12 +580,25 @@ void loop() {
   }
 
   if (loop_count % 100 == 0) {
-    Serial.print("IMU ax:");
+    print_encoder_raw();
+    Serial.print(" PWM L:");
+    Serial.print(last_pwm_left, 0);
+    Serial.print(" R:");
+    Serial.print(last_pwm_right, 0);
+    Serial.print("  IMU ax:");
     Serial.print(imu_ax);
     Serial.print(" ay:");
     Serial.print(imu_ay);
     Serial.print(" az:");
     Serial.print(imu_az);
+    Serial.print("  RPM tgtL:");
+    Serial.print(target_rpm_left_filtered, 0);
+    Serial.print(" actL:");
+    Serial.print(actual_rpm_left, 0);
+    Serial.print(" tgtR:");
+    Serial.print(target_rpm_right_filtered, 0);
+    Serial.print(" actR:");
+    Serial.print(actual_rpm_right, 0);
     Serial.print("  odom x:");
     Serial.print(odom_x, 3);
     Serial.print(" y:");
