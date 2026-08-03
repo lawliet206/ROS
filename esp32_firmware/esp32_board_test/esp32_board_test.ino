@@ -50,9 +50,9 @@
 #define LOOP_INTERVAL_US  10000
 #define WATCHDOG_TIMEOUT  30000
 
-#define STALL_DETECT_PWM_THRESH  1023.0f
-#define STALL_DETECT_RPM_THRESH  1.0f
-#define STALL_DETECT_TIME_MS     2000
+#define STALL_DETECT_CMD_THRESH  80.0f         // [可调] 堵转判定命令转速阈值 (RPM). 命令 ≥80 RPM 但实际 <1 → 堵转
+#define STALL_DETECT_RPM_THRESH  1.0f           // [可调] 堵转判定 RPM 阈值. RPM 降到 1 以下才算堵转
+#define STALL_DETECT_TIME_MS     2000           // [可调] 堵转确认时间 (ms). 实车调参
 
 struct PIDState { 
   float kp, ki, kd;
@@ -528,8 +528,8 @@ void loop() {
         last_pwm_right = apply_deadzone_ff(last_pwm_right);
       }
 
-      if (fabs(last_pwm_left) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_left) < STALL_DETECT_RPM_THRESH
-          && fabs(target_rpm_left_filtered) > 20.0f) {
+      if (fabs(target_rpm_left_filtered) > STALL_DETECT_CMD_THRESH
+          && fabs(actual_rpm_left) < STALL_DETECT_RPM_THRESH) {
         if (stall_timer_start_l == 0) stall_timer_start_l = millis();
         else if (millis() - stall_timer_start_l > STALL_DETECT_TIME_MS) {
           if (!stall_fault_l) { 
@@ -540,8 +540,8 @@ void loop() {
         }
       } else { stall_timer_start_l = 0; }
       
-      if (fabs(last_pwm_right) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_right) < STALL_DETECT_RPM_THRESH
-          && fabs(target_rpm_right_filtered) > 20.0f) {
+      if (fabs(target_rpm_right_filtered) > STALL_DETECT_CMD_THRESH
+          && fabs(actual_rpm_right) < STALL_DETECT_RPM_THRESH) {
         if (stall_timer_start_r == 0) stall_timer_start_r = millis();
         else if (millis() - stall_timer_start_r > STALL_DETECT_TIME_MS) {
           if (!stall_fault_r) { 

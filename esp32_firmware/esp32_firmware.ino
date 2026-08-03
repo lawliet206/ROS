@@ -62,11 +62,12 @@
 #define WATCHDOG_TIMEOUT  800                   // [可调] 看门狗超时 (ms). 超过此时间没收到 /cmd_vel 则自动停车拉低 STBY. 设太小正常行驶中突然无指令会急停, 太大失控后要很久才自动停
 
 // ========== 堵转检测 ==========
-// 判定条件: PWM 已给到很高 (STALL_DETECT_PWM_THRESH) 但 RPM 几乎为零 (STALL_DETECT_RPM_THRESH) 持续超过 STALL_DETECT_TIME_MS
-// 触发后该侧电机切断 PWM, 等 target_rpm 降回 1 以下自动恢复
-#define STALL_DETECT_PWM_THRESH  1023.0f        // [可调] 堵转判定 PWM 阈值. 放宽松不易误判
+// 判定条件: 命令转速 ≥ STALL_DETECT_CMD_THRESH 但实际转速 < 1 RPM, 持续超过 STALL_DETECT_TIME_MS
+// 不用 PWM 阈值判断: 堵转 5s 时 PID 输出仅 ~600 (Kp*200 + Ki*200*5), 积分 10s 才饱和到 900,
+// 固定 PWM 阈值 (如 800/1000) 无法在触发窗口内命中. 目标/实际转速差才是堵转的本质特征.
+#define STALL_DETECT_CMD_THRESH  80.0f         // [可调] 堵转判定命令转速阈值 (RPM). 命令 ≥80 RPM 但实际 <1 → 堵转
 #define STALL_DETECT_RPM_THRESH  1.0f           // [可调] 堵转判定 RPM 阈值. RPM 降到 1 以下才算堵转
-#define STALL_DETECT_TIME_MS     2000           // [可调] 堵转确认时间 (ms). 持续 2 秒真堵转才停, 过坎不会误判
+#define STALL_DETECT_TIME_MS     2000           // [可调] 堵转确认时间 (ms). 持续 2 秒真堵转才停, 过坎不会误判 (实车调参)
 
 ros::NodeHandle nh;
 
@@ -430,11 +431,16 @@ void setup() {
   for (int i = 0; i < 10; i++) { read_imu(); delay(10); }
   
   // ========== PID 增益 (左右独立可调) ==========
-  // 调参顺序: 先只加 Kp 让轮子跟得上设定转速, 再加 Ki 消除稳态误差 (低速/重载时重要), 最后加少量 Kd 抑制震荡
+  // 调参顺序: 先只加 Kp 让轮子跟得上设定转速, 再加 Ki 消除稳态误差 (低速/重载时重要), 最后加少量 Kd 抑制振荡
   // {Kp, Ki, Kd, integral, prev_measurement, initialized}
   pid_left  = {1.5f, 0.3f, 0.05f, 0, 0, false};   // [可调] 左轮 PID. Kp=比例, Ki=积分, Kd=微分. 左右通常一致, 但如果两侧电机/传动有差异可独立调
-  pid_right = {1.5f, 0.3f, 0.05f, 0, 0, false};   // [可调] 右轮 PID. 调大 Kp: 跟得更紧但可能震荡. 调大 Ki: 消除稳态误差但可能过冲. 调大 Kd: 抑制震荡但可能放大噪声
-  
+  pid_right = {1.5f, 0.3f, 0.05f, 0, 0, false};   // [可调] 右轮 PID. 调大 Kp: 跟得更紧但可能振荡. 调大 Ki: 消除稳态误差但可能过冲. 调大 Kd: 抑制振荡但可能放大噪声
+
+  // 关键: 必须显式设置 rosserial 波特率!
+  // ros_lib 的 ArduinoHardware 构造函数默认波特率是 57600 (ros_lib/ArduinoHardware.h 的默认参数),
+  // 若不设置, 下面的 nh.initNode() 会调用 Serial.begin(57600) 覆盖上方 Serial.begin(460800),
+  // 导致 J1900 以 _baud:=460800 连接失败.
+  nh.getHardware()->setBaud(460800);
   nh.initNode();
   nh.advertise(pub_odom);
   nh.advertise(pub_imu);
@@ -512,8 +518,8 @@ void loop() {
         pwm_right = apply_deadzone_ff(pwm_right);
       }
 
-      if (fabs(pwm_left) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_left) < STALL_DETECT_RPM_THRESH
-          && fabs(target_rpm_left_filtered) > 20.0f) {
+      if (fabs(target_rpm_left_filtered) > STALL_DETECT_CMD_THRESH
+          && fabs(actual_rpm_left) < STALL_DETECT_RPM_THRESH) {
         if (stall_timer_start_l == 0) stall_timer_start_l = millis();
         else if (millis() - stall_timer_start_l > STALL_DETECT_TIME_MS) {
           if (!stall_fault_l) { 
@@ -524,8 +530,8 @@ void loop() {
         }
       } else { stall_timer_start_l = 0; }
       
-      if (fabs(pwm_right) > STALL_DETECT_PWM_THRESH && fabs(actual_rpm_right) < STALL_DETECT_RPM_THRESH
-          && fabs(target_rpm_right_filtered) > 20.0f) {
+      if (fabs(target_rpm_right_filtered) > STALL_DETECT_CMD_THRESH
+          && fabs(actual_rpm_right) < STALL_DETECT_RPM_THRESH) {
         if (stall_timer_start_r == 0) stall_timer_start_r = millis();
         else if (millis() - stall_timer_start_r > STALL_DETECT_TIME_MS) {
           if (!stall_fault_r) { 
