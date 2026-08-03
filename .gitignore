@@ -24,3 +24,6 @@ YDLIDAR/ydlidar_ws/log
 *.swp
 *.swo
 *~
+
+# YOLO 模型权重 (person_detector 首次运行自动下载)
+yolov8n.pt
