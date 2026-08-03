@@ -9,7 +9,7 @@
 <launch>
 
   <arg name="lidar_model" default="s9_fsrd" />
-  <arg name="lidar_port"  default="/dev/ttyUSB1" />
+  <arg name="lidar_port"  default="/dev/ttyUSB0" />
   <arg name="start_lidar" default="true" />
   <arg name="follow_dist" default="1.0" />
   <arg name="max_speed"   default="0.5" />

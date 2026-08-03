@@ -23,7 +23,7 @@
   <!-- ===== 参数 ===== -->
   <arg name="map_file"     default="" />
   <arg name="lidar_model"  default="s9_fsrd" />
-  <arg name="lidar_port"   default="/dev/ttyUSB1" />
+  <arg name="lidar_port"   default="/dev/ttyUSB0" />
   <arg name="start_lidar"  default="true" />  <!-- 实物部署时设 false -->
 
   <!-- ============================================================ -->

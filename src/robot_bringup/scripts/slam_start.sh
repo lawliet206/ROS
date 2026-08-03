@@ -66,8 +66,8 @@ for topic in /odom /scan; do
         sleep 1; waited=$((waited + 1))
         if [ $waited -ge 60 ]; then
             echo "[ERROR] 超时: 话题 $topic 未出现. 请确认 J1900 上已启动:"
-            echo "  rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800"
-            echo "  rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1"
+            echo "  rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800"
+            echo "  rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0"
             exit 1
         fi
         echo -n "."

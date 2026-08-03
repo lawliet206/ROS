@@ -20,7 +20,7 @@
 
   <!-- ===== 激光雷达参数 ===== -->
   <arg name="lidar_model" default="s9_fsrd" />
-  <arg name="lidar_port"  default="/dev/ttyUSB1" />
+  <arg name="lidar_port"  default="/dev/ttyUSB0" />
   <arg name="start_lidar" default="true" />
   <arg name="deskew"      default="false" />  <!-- IMU 去畸变 -->
 

@@ -74,10 +74,10 @@ bash ~/ROS/src/robot_sim/scripts/sim_navigation.sh ~/maps/sim_map.yaml
 
 ```bash
 # J1900 终端1: ESP32 rosserial
-rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800
+rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800
 
 # J1900 终端2: 雷达
-rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1
+rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0
 
 # PC 终端: 建图或导航
 roslaunch robot_bringup slam.launch start_lidar:=false

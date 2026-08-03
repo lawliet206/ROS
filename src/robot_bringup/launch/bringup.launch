@@ -18,7 +18,7 @@
 
   <!-- 激光雷达型号: s9_fsrd / ydlidar_x4 / ydlidar_f2 / rplidar_a1 / rplidar_a2 -->
   <arg name="lidar_model" default="s9_fsrd" />
-  <arg name="lidar_port"  default="/dev/ttyUSB1" />
+  <arg name="lidar_port"  default="/dev/ttyUSB0" />
 
   <!-- 是否启动激光雷达驱动 (没雷达时关掉) -->
   <arg name="start_lidar" default="true" />

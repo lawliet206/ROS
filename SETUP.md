@@ -243,7 +243,7 @@ sudo udevadm control --reload-rules
 
 每次开机确认：
 ```bash
-ls /dev/ttyUSB*   # USB0=ESP32  USB1=激光雷达
+ls /dev/ttyUSB*   # USB0=激光雷达  USB1=ESP32
 ```
 
 ---
@@ -256,9 +256,9 @@ ls /dev/ttyUSB*   # USB0=ESP32  USB1=激光雷达
 2. 电池上电 → ESP32 亮灯
 3. J1900 启动 rosserial：
    ```bash
-   rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800
+   rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800
    ```
-   看到 `connected on /dev/ttyUSB0` 即成功
+   看到 `connected on /dev/ttyUSB1` 即成功
 
 4. 测试电机：
    ```bash
@@ -322,8 +322,8 @@ bash ~/ROS/src/robot_sim/scripts/sim_follow.sh
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
-| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
-| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
+| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
+| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
 | 4 | PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` |
 | 5 | PC | `rosrun teleop_twist_keyboard teleop_twist_keyboard.py`（i 前进 k 停） |
 
@@ -341,8 +341,8 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
-| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
-| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
+| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
+| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
 | 4 | PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` |
 | 5 | PC | `rosrun robot_bringup send_goals.py _goals:="[[2,0,0],[4,2,1.57]]"` |
 
@@ -355,8 +355,8 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
-| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
-| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
+| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
+| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
 | 4 | PC | `roslaunch robot_bringup follow.launch start_lidar:=false` |
 
 **方案 B：视觉+雷达融合跟随**（推荐，角度来自 YOLO 视觉 ±2~3°，距离来自雷达）
@@ -365,8 +365,8 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
-| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
-| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
+| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
+| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
 | 4 | J1900 | 摄像头推流 (usb_cam + republish, 见第 10 章) |
 | 5 | PC | `roslaunch robot_bringup follow_vision.launch` |
 
@@ -402,8 +402,8 @@ rostopic echo /odometry/filtered -n1
 
 | 在哪 | 命令 | 功能 |
 |------|------|------|
-| J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` | ESP32 桥接 |
-| J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` | 激光雷达 |
+| J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` | ESP32 桥接 |
+| J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` | 激光雷达 |
 | PC | `roslaunch robot_bringup ekf.launch` | EKF 传感器融合 (单独调试用) |
 | PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` | SLAM 建图 (自动等话题) |
 | PC | `rosrun map_server map_saver -f ~/maps/lab_map` | 保存地图 |
