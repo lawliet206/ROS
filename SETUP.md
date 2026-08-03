@@ -119,8 +119,8 @@ Arduino IDE 打开 `esp32_firmware/esp32_firmware.ino`：
 - Board → ESP32 Dev Module，Upload Speed → 115200
 - 烧录后通过 rosserial 自动发布 `/odom` + `/imu`，订阅 `/cmd_vel`
 
-**注意**：固件内 rosserial 波特率固定为 **460800**（`Serial.begin(460800)`），
-J1900 启动 `serial_node.py` 时必须带 `_baud:=460800`，否则连不上。
+**注意**：固件内 rosserial 波特率固定为 **230400**（`Serial.begin(230400)`），
+J1900 启动 `serial_node.py` 时必须带 `_baud:=230400`，否则连不上。
 （Arduino 上传速度 115200 是烧录用的，与 rosserial 运行波特率无关。）
 
 固件功能：PCNT 硬件编码器（不漏脉冲）、双路 PID、MPU6050 IMU（已旋转到 base_link 帧）、
@@ -129,7 +129,7 @@ J1900 启动 `serial_node.py` 时必须带 `_baud:=460800`，否则连不上。
 **⚠️ ESP32 连接注意（实车经验）**：
 - `serial_node.py` 要**保持常驻**（不要反复重启）
 - 若反复重启后握手失败（日志 `Mismatched protocol version`）→ **按 ESP32 的 EN/RST 键复位**后再启动 serial_node
-- 460800 波特率是吞吐必需（odom+imu 50Hz ≈ 26KB/s），不要降到 115200（会丢数据）
+- 230400 波特率是吞吐必需（odom+imu 33Hz ≈ 17KB/s），不要降到 115200（会丢数据）
 
 ---
 

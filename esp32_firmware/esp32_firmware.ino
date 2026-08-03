@@ -417,7 +417,8 @@ void setup() {
   // ========== 通信参数 ==========
   Serial.setRxBufferSize(1024);              // [可调] 串口接收缓冲区 (bytes). 460800 波特率下 1024 字节够用. 如果丢包/粘包频繁可以加大, 但 ESP32 内存有限
   Serial.setTxBufferSize(1024);              // [可调] 串口发送缓冲区 (bytes). 同上
-  Serial.begin(460800);                      // [可调] 波特率. 460800 为默认 (吞吐必需: odom+imu 50Hz ≈ 26KB/s). 若握手不稳定可降 230400+30Hz
+  Serial.begin(230400);                      // [可调] 波特率. 230400 稳定性实测优于 460800 (ESP32 时钟误差位错位: 握手 0xef/odom checksum 错/cmd_vel 丢弃).
+                                              // 发布频率降至 33Hz 后吞吐 17KB/s < 230400 容量 23KB/s
   
   pinMode(PIN_L_ENC_A, INPUT_PULLUP); pinMode(PIN_L_ENC_B, INPUT_PULLUP);
   pinMode(PIN_R_ENC_A, INPUT_PULLUP); pinMode(PIN_R_ENC_B, INPUT_PULLUP);
@@ -438,9 +439,9 @@ void setup() {
 
   // 关键: 必须显式设置 rosserial 波特率!
   // ros_lib 的 ArduinoHardware 构造函数默认波特率是 57600 (ros_lib/ArduinoHardware.h 的默认参数),
-  // 若不设置, 下面的 nh.initNode() 会调用 Serial.begin(57600) 覆盖上方 Serial.begin(460800),
-  // 导致 J1900 以 _baud:=460800 连接失败.
-  nh.getHardware()->setBaud(460800);
+  // 若不设置, 下面的 nh.initNode() 会调用 Serial.begin(57600) 覆盖上方 Serial.begin(230400),
+  // 导致 J1900 以 _baud:=230400 连接失败.
+  nh.getHardware()->setBaud(230400);
   nh.initNode();
   nh.advertise(pub_odom);
   nh.advertise(pub_imu);
@@ -639,7 +640,7 @@ void loop() {
     imu_msg.orientation_covariance[8] = 100.0;          // [重要] yaw 方差=100, 表示偏航角完全不可信. 因为 cf_yaw 是纯陀螺仪积分没有磁力计修正, EKF 不应使用此值做偏航参考
   }
 
-  if (loop_count % 2 == 0) {
+  if (loop_count % 3 == 0) {   // 33Hz (100Hz loop): 降频以适配 230400 波特率吞吐
     pub_odom.publish(&odom_msg);
     if (imu_data_valid) pub_imu.publish(&imu_msg);
   }

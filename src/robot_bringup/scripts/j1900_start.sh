@@ -34,14 +34,15 @@ start_esp32() {
     python3 -c "
 import serial, time
 ser = serial.Serial('/dev/ttyUSB0', 460800, timeout=0.1)
-ser.setDTR(False); ser.setRTS(True); time.sleep(0.2)   # EN=low → 复位
-ser.setRTS(False); time.sleep(0.2)                      # EN=high → 运行
+ser.setDTR(False); ser.setRTS(True); time.sleep(0.6)   # EN=low 600ms 确保复位
+ser.setRTS(False); time.sleep(0.8)                      # EN=high, 等 ESP32 上电
+ser.reset_input_buffer()                                # 清空复位期间残留数据
 ser.close()
 "
-    sleep 1
+    sleep 2   # 等 ESP32 完全启动 (initNode 前)
     echo "  启动 ESP32 rosserial (460800)..."
-    nohup rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800 > $ESP32_LOG 2>&1 &
-    sleep 5
+    nohup rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=230400 > $ESP32_LOG 2>&1 &
+    sleep 6
     pgrep -f "[s]erial_node" > /dev/null \
       && echo "  ✓ ESP32 已启动 (自动复位握手)" \
       || echo "  ✗ ESP32 启动失败 (查 $ESP32_LOG)"
