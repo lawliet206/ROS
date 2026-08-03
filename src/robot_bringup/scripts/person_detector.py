@@ -9,12 +9,16 @@ person_detector.py — YOLOv8n 人体检测节点 (PC 端)
   rosrun robot_bringup person_detector.py
 """
 import math
+import os
 import cv2
 import numpy as np
 import rospy
 from sensor_msgs.msg import CompressedImage
 from std_msgs.msg import Float32, Bool
 from ultralytics import YOLO
+
+# 强制离线: 避免 ultralytics 首次运行联网检查/下载导致卡住 (模型在本地)
+os.environ.setdefault("YOLO_OFFLINE", "1")
 
 
 def angle_from_center(center_x, image_width, hfov_deg):
@@ -58,8 +62,13 @@ class PersonDetector:
         # 显式 CPU 推理: 本机 CUDA 版 PyTorch 在无可用 GPU 时推理会直接崩溃
         self.device = rospy.get_param("~device", "cpu")
 
-        rospy.loginfo("[Detect] YOLOv8n 加载中 (首次运行自动下载权重)...")
-        self.model = YOLO("yolov8n.pt")
+        rospy.loginfo("[Detect] YOLOv8n 加载中 (本地权重, 离线推理)...")
+        # 权重路径: 优先 rosparam ~model, 默认 <ROS根>/yolov8n.pt (相对 scripts/ 向上 3 级)
+        model_path = rospy.get_param(
+            "~model",
+            os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "..", "..", "..", "yolov8n.pt"))
+        self.model = YOLO(model_path)
 
         self.angle_pub = rospy.Publisher("/person_angle", Float32, queue_size=1)
         self.visible_pub = rospy.Publisher("/person_visible", Bool, queue_size=1)

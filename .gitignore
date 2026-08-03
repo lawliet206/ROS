@@ -27,3 +27,4 @@ YDLIDAR/ydlidar_ws/log
 
 # YOLO 模型权重 (person_detector 首次运行自动下载)
 yolov8n.pt
+.roscore.log

@@ -417,7 +417,7 @@ void setup() {
   // ========== 通信参数 ==========
   Serial.setRxBufferSize(1024);              // [可调] 串口接收缓冲区 (bytes). 460800 波特率下 1024 字节够用. 如果丢包/粘包频繁可以加大, 但 ESP32 内存有限
   Serial.setTxBufferSize(1024);              // [可调] 串口发送缓冲区 (bytes). 同上
-  Serial.begin(460800);                      // [可调] 波特率. 460800 为默认. 降低可提高稳定性, 但数据吞吐量下降
+  Serial.begin(460800);                      // [可调] 波特率. 460800 为默认 (吞吐必需: odom+imu 50Hz ≈ 26KB/s). 若握手不稳定可降 230400+30Hz
   
   pinMode(PIN_L_ENC_A, INPUT_PULLUP); pinMode(PIN_L_ENC_B, INPUT_PULLUP);
   pinMode(PIN_R_ENC_A, INPUT_PULLUP); pinMode(PIN_R_ENC_B, INPUT_PULLUP);
