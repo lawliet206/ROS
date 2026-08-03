@@ -93,7 +93,13 @@ sudo apt update
 # 2. 安装 ROS Base + 驱动依赖
 sudo apt install ros-noetic-ros-base python3-serial python3-pip
 sudo apt install ros-noetic-rosserial-python
+# 摄像头推流 (视觉跟随用, compressed_image_transport 是压缩插件必需):
+sudo apt install ros-noetic-usb-cam ros-noetic-image-transport ros-noetic-compressed-image-transport
 pip3 install pyserial pyyaml
+
+# 3. 串口权限 (雷达/ESP32 必需)
+echo 'KERNEL=="ttyUSB*", MODE="0666"' | sudo tee /etc/udev/rules.d/99-usb-serial.rules
+sudo udevadm control --reload-rules
 
 # 3. 从 PC 部署 robot_bringup 包 (J1900 只需这一个包: 雷达驱动 + launch)
 #    仿真包 robot_sim / 视觉节点 person_detector·vision_follower 均在 PC 运行, 无需部署到 J1900.
@@ -118,7 +124,12 @@ J1900 启动 `serial_node.py` 时必须带 `_baud:=460800`，否则连不上。
 （Arduino 上传速度 115200 是烧录用的，与 rosserial 运行波特率无关。）
 
 固件功能：PCNT 硬件编码器（不漏脉冲）、双路 PID、MPU6050 IMU（已旋转到 base_link 帧）、
-500ms→800ms 看门狗（无指令自动停车）、堵转检测（切 PWM 等指令降回后自动恢复）。
+看门狗 800ms（无指令自动停车）、堵转检测（命令≥80RPM 但实际<1RPM 持续 2s 切断 PWM）。
+
+**⚠️ ESP32 连接注意（实车经验）**：
+- `serial_node.py` 要**保持常驻**（不要反复重启）
+- 若反复重启后握手失败（日志 `Mismatched protocol version`）→ **按 ESP32 的 EN/RST 键复位**后再启动 serial_node
+- 460800 波特率是吞吐必需（odom+imu 50Hz ≈ 26KB/s），不要降到 115200（会丢数据）
 
 ---
 
@@ -156,7 +167,8 @@ export ROS_IP=${PC_IP}
 
 # ========== J1900 (~/.bashrc 末尾添加) ==========
 export ROS_MASTER_URI=http://${PC_IP}:11311   # 指向 PC
-export ROS_IP=${J1900_IP}
+# ROS_IP 用动态获取! J1900 的 WiFi IP 会浮动 (DHCP), 写死会导致节点间无法通信
+export ROS_IP=$(hostname -I | awk '{print $1}')
 
 # 两台都 source 一下让配置生效
 source ~/.bashrc
@@ -165,14 +177,15 @@ source ~/.bashrc
 ### 3.4 验证
 
 ```bash
-# PC 启动 roscore
-roscore
+# PC 启动 roscore (推荐用持久脚本, PC 重启后需重跑)
+bash ~/ROS/start_roscore.sh
 
 # J1900 测试能否连上 Master
 rostopic list   # 应看到 /rosout 和 /rosout_agg
 ```
 
 > ⚠️ 如果 J1900 的 `rostopic list` 卡住：PC 和 J1900 互相 `ping` 对方 IP，确认在同一网络。关闭 PC 防火墙：`sudo ufw disable`。
+> ⚠️ **J1900 IP 浮动**：`lawliet.local` 每次重连解析的 IP 可能不同（如 .211 ↔ .212），SSH 前先 `ping lawliet.local` 拿当前 IP。
 
 ---
 
@@ -254,11 +267,11 @@ ls /dev/ttyUSB*   # USB0=激光雷达  USB1=ESP32
 
 1. 万用表确认 TB6612FNG VM = 电池电压（~11-12V）
 2. 电池上电 → ESP32 亮灯
-3. J1900 启动 rosserial：
+3. J1900 启动 ESP32（一键脚本, 自动复位 + 动态端口检测）：
    ```bash
-   rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800
+   bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1
    ```
-   看到 `connected on /dev/ttyUSB1` 即成功
+   然后 PC 端 `rostopic echo /odom -n1` 有数据即连接成功
 
 4. 测试电机：
    ```bash
@@ -322,10 +335,9 @@ bash ~/ROS/src/robot_sim/scripts/sim_follow.sh
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
-| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
-| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
-| 4 | PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` |
-| 5 | PC | `rosrun teleop_twist_keyboard teleop_twist_keyboard.py`（i 前进 k 停） |
+| 2 | J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1` (ESP32+雷达一键) |
+| 3 | PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` |
+| 4 | PC | `rosrun teleop_twist_keyboard teleop_twist_keyboard.py`（i 前进 k 停） |
 
 > **自动保护**: slam_start.sh 会等待 `/odom` + `/scan` 就绪(60s超时)，再启动 SLAM。
 
@@ -341,10 +353,16 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
+<<<<<<< HEAD
 | 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
 | 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
 | 4 | PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` |
 | 5 | PC | `rosrun robot_bringup send_goals.py _goals:="[[2,0,0],[4,2,1.57]]"` |
+=======
+| 2 | J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1` |
+| 3 | PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` |
+| 4 | PC | `rosrun robot_bringup send_goals.py _goals:="[[2,0,0],[4,2,1.57]]"` |
+>>>>>>> feat: J1900一键启动脚本(j1900_start.sh 数字模式+ESP32自动复位) + SETUP部署步骤全面更新
 
 或在 RViz 用 "2D Nav Goal" 手动点目标。
 
@@ -355,20 +373,29 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
+<<<<<<< HEAD
 | 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
 | 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
 | 4 | PC | `roslaunch robot_bringup follow.launch start_lidar:=false` |
+=======
+| 2 | J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1` |
+| 3 | PC | `roslaunch robot_bringup follow.launch start_lidar:=false` |
+>>>>>>> feat: J1900一键启动脚本(j1900_start.sh 数字模式+ESP32自动复位) + SETUP部署步骤全面更新
 
 **方案 B：视觉+雷达融合跟随**（推荐，角度来自 YOLO 视觉 ±2~3°，距离来自雷达）
-前置：J1900 已启动摄像头推流（见[第 10 章](#10-视觉雷达融合人体跟随可选)）
 
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
+<<<<<<< HEAD
 | 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
 | 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
 | 4 | J1900 | 摄像头推流 (usb_cam + republish, 见第 10 章) |
 | 5 | PC | `roslaunch robot_bringup follow_vision.launch` |
+=======
+| 2 | J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 2` (含摄像头推流) |
+| 3 | PC | `roslaunch robot_bringup follow_vision.launch` |
+>>>>>>> feat: J1900一键启动脚本(j1900_start.sh 数字模式+ESP32自动复位) + SETUP部署步骤全面更新
 
 ### 7.4 EKF 传感器融合（已内置，自动启动）
 
@@ -402,8 +429,14 @@ rostopic echo /odometry/filtered -n1
 
 | 在哪 | 命令 | 功能 |
 |------|------|------|
+<<<<<<< HEAD
 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` | ESP32 桥接 |
 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` | 激光雷达 |
+=======
+| J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1` | ESP32 + 雷达一键启动 |
+| J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 2` | + 摄像头 (视觉跟随) |
+| J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 0` | 停止全部 |
+>>>>>>> feat: J1900一键启动脚本(j1900_start.sh 数字模式+ESP32自动复位) + SETUP部署步骤全面更新
 | PC | `roslaunch robot_bringup ekf.launch` | EKF 传感器融合 (单独调试用) |
 | PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` | SLAM 建图 (自动等话题) |
 | PC | `rosrun map_server map_saver -f ~/maps/lab_map` | 保存地图 |
@@ -445,27 +478,50 @@ rostopic echo /odometry/filtered -n1
 ### J1900 端（一次性安装）
 
 ```bash
-sudo apt install ros-noetic-usb-cam ros-noetic-image-transport
-
-# 摄像头推流 (先确认设备号: ls /dev/video*)
-rosrun usb_cam usb_cam_node _video_device:=/dev/video0 _image_width:=640 _image_height:=480 _pixel_format:=yuyv
-rosrun image_transport republish raw in:=/usb_cam/image_raw compressed out:=/image_raw
+sudo apt install ros-noetic-usb-cam ros-noetic-image-transport ros-noetic-compressed-image-transport
 ```
+
+### J1900 端启动（一键脚本, 不再需要手动开终端）
+
+```bash
+# 模式: 0=停止全部 | 1=base(ESP32+雷达, 建图/导航用) | 2=vision(+摄像头, 视觉跟随) | 3=状态
+bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1     # 建图/导航前
+bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 2     # 视觉跟随前
+bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 0     # 停止
+bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 3     # 查看状态
+```
+
+> **ESP32 自动复位**：脚本启动 ESP32 前通过 DTR/RTS 信号自动复位（无需按 EN 键）。
+> 反复切换模式或 serial_node 重启导致握手失败时, 0/1 重新切一次即可自动恢复。
+
+> 推流帧率验证: `rostopic hz /image_raw/compressed` — 320x240 应 ~20Hz (PC 端), 640x480 只有 ~8Hz。
 
 ### PC 端（一次性安装）
 
-若 [2.1](#21-pc-一次性) 已安装 `ultralytics pytest` 可跳过：
 ```bash
-pip3 install --user ultralytics pytest
+# 若 2.1 未装: pip3 install --user ultralytics pytest
+# YOLO 权重: yolov8n.pt 放 ~/ROS/ 根目录 (离线加载, 不会联网下载)
 ```
 
-### 启动
+### PC 端启动
 
 ```bash
-# J1900: 摄像头推流 + 雷达驱动 (见上)
-# PC:
+# PC 终端1: ROS Master
+bash ~/ROS/start_roscore.sh
+
+# PC 终端2: 仅看图像 + 检测结果 (调试用)
+bash ~/ROS/tools/view_detection.sh     # 弹出窗口显示检测框
+
+# PC 终端3: 完整融合跟随
 roslaunch robot_bringup follow_vision.launch
-# 调试: rqt_image_view /person_overlay 查看检测框
+```
+
+### 调试
+
+```bash
+rostopic echo /person_visible        # True/False
+rostopic echo /person_angle          # 偏角(弧度, 左正右负)
+# 或安装可视化: sudo apt install ros-noetic-rqt-image-view && rqt_image_view /person_overlay
 ```
 
 ### 参数（可选覆盖）
