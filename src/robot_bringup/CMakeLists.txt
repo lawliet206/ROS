@@ -11,6 +11,8 @@ catkin_install_python(PROGRAMS
   scripts/laser_follower.py
   scripts/scan_deskew.py
   scripts/send_goals.py
+  scripts/person_detector.py
+  scripts/vision_follower.py
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

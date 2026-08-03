@@ -1,0 +1,34 @@
+<!--
+  follow_vision.launch — 视觉+雷达融合人体跟随 (PC 端一键启动)
+  =============================================================
+  前置: J1900 上已启动摄像头推流 (usb_cam + republish) 和激光雷达驱动
+
+  使用:
+    roslaunch robot_bringup follow_vision.launch
+    roslaunch robot_bringup follow_vision.launch follow_dist:=1.2
+-->
+<launch>
+
+  <arg name="follow_dist" default="1.0" />
+  <arg name="max_speed"   default="0.5" />
+  <arg name="hfov"        default="60.0" />
+
+  <!-- 人体检测节点 (YOLOv8n) -->
+  <node name="person_detector" pkg="robot_bringup" type="person_detector.py"
+        output="screen">
+    <param name="hfov" value="$(arg hfov)" />
+    <param name="conf" value="0.4" />
+  </node>
+
+  <!-- 融合控制器 -->
+  <node name="follower" pkg="robot_bringup" type="vision_follower.py"
+        output="screen">
+    <param name="target_dist"     value="$(arg follow_dist)" />
+    <param name="max_linear"      value="$(arg max_speed)" />
+    <param name="max_angular"     value="0.8" />
+    <param name="lost_frames"     value="5" />
+    <param name="search_sweep"    value="60.0" />
+    <param name="search_angular"  value="0.6" />
+  </node>
+
+</launch>

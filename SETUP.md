@@ -432,3 +432,41 @@ rostopic echo /odometry/filtered -n1
 | Gazebo 打不开 | `export SVGA_VGPU10=0` |
 | slam_start.sh 卡在"等待话题" | J1900 上的 rosserial 或雷达驱动未启动，检查 J1900 终端 |
 | 导航和跟随能同时跑吗 | **不能** — 两者都写 `/cmd_vel`，会抢控。nav_start.sh 启动时会自动检测并警告 |
+
+---
+
+## 10. 视觉+雷达融合人体跟随（可选）
+
+架构: J1900 摄像头采集推流 → PC YOLOv8n 检测 (person_detector.py) → 融合控制 (vision_follower.py)
+分工: 视觉定方向（角度 ±2~3°），雷达定距离（人体宽度约束聚类）
+
+### J1900 端（一次性安装）
+
+```bash
+sudo apt install ros-noetic-usb-cam ros-noetic-image-transport
+
+# 摄像头推流 (先确认设备号: ls /dev/video*)
+rosrun usb_cam usb_cam_node _video_device:=/dev/video0 _image_width:=640 _image_height:=480 _pixel_format:=yuyv
+rosrun image_transport republish raw in:=/usb_cam/image_raw compressed out:=/image_raw
+```
+
+### PC 端（一次性安装）
+
+```bash
+pip3 install --user ultralytics pytest
+```
+
+### 启动
+
+```bash
+# J1900: 摄像头推流 + 雷达驱动 (见上)
+# PC:
+roslaunch robot_bringup follow_vision.launch
+# 调试: rqt_image_view /person_overlay 查看检测框
+```
+
+### 参数（可选覆盖）
+
+```bash
+roslaunch robot_bringup follow_vision.launch follow_dist:=1.2 hfov:=70
+```
