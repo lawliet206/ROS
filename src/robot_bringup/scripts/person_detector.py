@@ -55,6 +55,8 @@ class PersonDetector:
         self.hfov = rospy.get_param("~hfov", 60.0)
         self.image_topic = rospy.get_param("~image_topic", "/image_raw/compressed")
         self.publish_overlay = rospy.get_param("~publish_overlay", True)
+        # 显式 CPU 推理: 本机 CUDA 版 PyTorch 在无可用 GPU 时推理会直接崩溃
+        self.device = rospy.get_param("~device", "cpu")
 
         rospy.loginfo("[Detect] YOLOv8n 加载中 (首次运行自动下载权重)...")
         self.model = YOLO("yolov8n.pt")
@@ -77,7 +79,7 @@ class PersonDetector:
             return
         h, w = frame.shape[:2]
 
-        results = self.model(frame, conf=self.conf, classes=[0], verbose=False)
+        results = self.model(frame, conf=self.conf, classes=[0], verbose=False, device=self.device)
         boxes = []
         if results and results[0].boxes is not None:
             xyxy = results[0].boxes.xyxy.cpu().tolist()
