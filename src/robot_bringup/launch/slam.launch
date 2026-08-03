@@ -39,12 +39,9 @@
 
   <!-- ============================================================ -->
   <!-- 1.5 odom→base_footprint TF (ROS 必需, ESP32 不发 TF)             -->
-  <!--      同节点名天然防重复, slam/navigation 谁先启谁生效              -->
+  <!--      共享定义见 odom_ekf.launch. 勿与其他含 EKF 的 launch 同跑   -->
   <!-- ============================================================ -->
-  <node name="ekf_localization" pkg="robot_localization"
-        type="ekf_localization_node" output="screen">
-    <rosparam file="$(find robot_bringup)/config/ekf.yaml" />
-  </node>
+  <include file="$(find robot_bringup)/launch/odom_ekf.launch" />
 
   <!-- ============================================================ -->
   <!-- 1.6 IMU 激光去畸变 (可选)                                      -->
@@ -96,7 +93,7 @@
     <param name="lsigma"            value="0.075" />
     <param name="ogain"             value="3.0" />
     <param name="lskip"             value="0" />
-    <param name="minimumScore"      value="50" />
+    <param name="minimumScore"      value="100" />
     <param name="srr"               value="0.1" />    <!-- 里程计平移噪声 -->
     <param name="srt"               value="0.2" />    <!-- 里程计旋转噪声 -->
     <param name="str"               value="0.1" />

@@ -37,12 +37,9 @@
 
   <!-- ============================================================ -->
   <!-- 1.5 odom→base_footprint TF (ROS 必需, ESP32 不发 TF)             -->
-  <!--      同节点名天然防重复, slam/navigation 谁先启谁生效              -->
+  <!--      共享定义见 odom_ekf.launch. 勿与其他含 EKF 的 launch 同跑   -->
   <!-- ============================================================ -->
-  <node name="ekf_localization" pkg="robot_localization"
-        type="ekf_localization_node" output="screen">
-    <rosparam file="$(find robot_bringup)/config/ekf.yaml" />
-  </node>
+  <include file="$(find robot_bringup)/launch/odom_ekf.launch" />
 
   <!-- ============================================================ -->
   <!-- 2. 地图服务 (map_server)                                      -->
@@ -103,7 +100,7 @@
     <param name="laser_model_type"    value="likelihood_field" />
     <param name="laser_min_range"     value="0.15" />
     <param name="laser_max_range"     value="8.0" />
-    <param name="laser_max_beams"     value="60" />     <!-- 均匀采样60束激光 (降算力) -->
+    <param name="laser_max_beams"     value="39" />     <!-- S9 雷达仅 39 点/帧, 无降采样意义 -->
     <param name="laser_z_hit"         value="0.95" />
     <param name="laser_z_rand"        value="0.05" />
 

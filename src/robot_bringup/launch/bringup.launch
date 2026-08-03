@@ -13,10 +13,8 @@
 <launch>
 
   <!-- ===== 机器人参数 ===== -->
-  <arg name="wheel_dia"   default="0.085" />   <!-- 轮径 (m), 85mm -->
-  <arg name="wheel_base"  default="0.180" />   <!-- 轮距 (m), 两轮中心距 180mm -->
-  <arg name="gear_ratio"  default="10.0" />    <!-- 减速比 1:10 -->
-  <arg name="enc_ppr"     default="11.0" />    <!-- 编码器 PPR -->
+  <!-- 机械参数 (轮径/轮距/减速比/编码器PPR) 已在 URDF robot.urdf 与 ESP32 固件中硬编码,
+       此处不重复声明, 避免死参数误导 -->
 
   <!-- 激光雷达型号: s9_fsrd / ydlidar_x4 / ydlidar_f2 / rplidar_a1 / rplidar_a2 -->
   <arg name="lidar_model" default="s9_fsrd" />

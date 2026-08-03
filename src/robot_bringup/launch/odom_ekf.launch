@@ -1,0 +1,18 @@
+<!--
+  odom_ekf.launch — EKF 传感器融合节点 (共享定义, 单一来源)
+  ======================================================
+  由 ekf.launch / slam.launch / navigation.launch include,
+  避免三处各自维护 EKF 节点定义导致参数漂移.
+
+  注意: 勿与其他包含本文件的 launch 同时启动——同名节点
+        ekf_localization 后注册者会抢占踢掉先注册者,
+        期间 TF 短暂中断, AMCL 可能失锁.
+-->
+<launch>
+
+  <node name="ekf_localization" pkg="robot_localization"
+        type="ekf_localization_node" output="screen">
+    <rosparam file="$(find robot_bringup)/config/ekf.yaml" />
+  </node>
+
+</launch>

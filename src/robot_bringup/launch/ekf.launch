@@ -32,11 +32,8 @@
   </include>
 
   <!-- ============================================================ -->
-  <!-- 2. EKF 融合节点                                                 -->
+  <!-- 2. EKF 融合节点 (共享定义见 odom_ekf.launch)                   -->
   <!-- ============================================================ -->
-  <node name="ekf_localization" pkg="robot_localization"
-        type="ekf_localization_node" output="screen">
-    <rosparam file="$(find robot_bringup)/config/ekf.yaml" />
-  </node>
+  <include file="$(find robot_bringup)/launch/odom_ekf.launch" />
 
 </launch>

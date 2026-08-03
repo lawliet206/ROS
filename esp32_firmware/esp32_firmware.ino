@@ -59,7 +59,7 @@
 
 // ========== 时序与安全 ==========
 #define LOOP_INTERVAL_US  10000                 // [可调] 主循环间隔 (μs). 10000=10ms=100Hz. 改小提高控制频率但增加 CPU 负载. 改大降低频率但编码器采样更稀疏, 高速下 RPM 估算不准
-#define WATCHDOG_TIMEOUT  500                   // [可调] 看门狗超时 (ms). 超过此时间没收到 /cmd_vel 则自动停车拉低 STBY. 设太小正常行驶中突然无指令会急停, 太大失控后要很久才自动停
+#define WATCHDOG_TIMEOUT  800                   // [可调] 看门狗超时 (ms). 超过此时间没收到 /cmd_vel 则自动停车拉低 STBY. 设太小正常行驶中突然无指令会急停, 太大失控后要很久才自动停
 
 // ========== 堵转检测 ==========
 // 判定条件: PWM 已给到很高 (STALL_DETECT_PWM_THRESH) 但 RPM 几乎为零 (STALL_DETECT_RPM_THRESH) 持续超过 STALL_DETECT_TIME_MS
@@ -327,12 +327,12 @@ void calibrate_imu() {
       abias_x = axs / accel_valid;
       abias_y = ays / accel_valid;
       abias_z = azs / accel_valid - 8192;
+      imu_calibrated = true;   // 加速度计校准成功才标记已校准 (陀螺仪零偏已单独校准)
       nh.loginfo("Accel calibration done.");
     } else {
       nh.logwarn("Accel calibration skipped (noisy).");
     }
 
-    imu_calibrated = true;
     read_imu();
     if (imu_data_valid) {
       cf_roll  = atan2(-imu_ay,  imu_az);

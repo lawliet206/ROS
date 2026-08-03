@@ -36,12 +36,12 @@
   - 纯函数 `angle_from_center(center_x, image_width, hfov_deg) -> float`（弧度，左正）
   - 纯函数 `select_center_box(boxes, image_width) -> tuple|None`（返回 (cx, x1, y1, x2, y2)）
 
-- [ ] **Step 1: 安装 pytest**
+- [x] **Step 1: 安装 pytest**
 
 Run: `pip3 install --user pytest`
 Expected: 安装成功，无报错
 
-- [ ] **Step 2: 写失败测试**
+- [x] **Step 2: 写失败测试**
 
 Create `tests/test_person_detector.py`:
 
@@ -99,12 +99,12 @@ def test_select_center_box_tie_break():
     assert sel[0] == 320.0
 ```
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `python3 -m pytest tests/test_person_detector.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'person_detector'`
 
-- [ ] **Step 4: 实现 person_detector.py**
+- [x] **Step 4: 实现 person_detector.py**
 
 Create `src/robot_bringup/scripts/person_detector.py`:
 
@@ -232,17 +232,17 @@ if __name__ == "__main__":
         pass
 ```
 
-- [ ] **Step 5: chmod +x 并运行测试确认通过**
+- [x] **Step 5: chmod +x 并运行测试确认通过**
 
 Run: `chmod +x src/robot_bringup/scripts/person_detector.py && python3 -m pytest tests/test_person_detector.py -v`
 Expected: 7 tests PASS
 
-- [ ] **Step 6: 语法检查**
+- [x] **Step 6: 语法检查**
 
 Run: `python3 -m py_compile src/robot_bringup/scripts/person_detector.py`
 Expected: 无输出 (退出码 0)
 
-- [ ] **Step 7: 提交**
+- [x] **Step 7: 提交**
 
 ```bash
 git add src/robot_bringup/scripts/person_detector.py tests/test_person_detector.py
@@ -267,7 +267,7 @@ git commit -m "feat: person_detector YOLOv8n人体检测节点(最中央人选�
 - 纯函数 `_cluster_width(cluster) -> float`（簇物理宽度, 内部用）
 - 类 `FollowStateMachine(lost_frames=5, sweep_deg=60.0, search_angular=0.6)`，方法 `update(person_visible, dt) -> (state, angular_cmd)`，常量 `FOLLOW=0 / SEARCH=1 / STOP=2`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 Create `tests/test_vision_follower.py`:
 
@@ -382,12 +382,12 @@ def test_sm_stop_stays_stopped():
     assert ang == 0.0
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `python3 -m pytest tests/test_vision_follower.py -v`
 Expected: FAIL — `ModuleNotFoundError: No module named 'vision_follower'`
 
-- [ ] **Step 3: 实现 vision_follower.py**
+- [x] **Step 3: 实现 vision_follower.py**
 
 Create `src/robot_bringup/scripts/vision_follower.py`:
 
@@ -662,17 +662,17 @@ if __name__ == "__main__":
         pass
 ```
 
-- [ ] **Step 4: chmod +x 并运行测试确认通过**
+- [x] **Step 4: chmod +x 并运行测试确认通过**
 
 Run: `chmod +x src/robot_bringup/scripts/vision_follower.py && python3 -m pytest tests/test_vision_follower.py -v`
 Expected: 8 tests PASS
 
-- [ ] **Step 5: 语法检查**
+- [x] **Step 5: 语法检查**
 
 Run: `python3 -m py_compile src/robot_bringup/scripts/vision_follower.py`
 Expected: 无输出 (退出码 0)
 
-- [ ] **Step 6: 提交**
+- [x] **Step 6: 提交**
 
 ```bash
 git add src/robot_bringup/scripts/vision_follower.py tests/test_vision_follower.py
@@ -691,7 +691,7 @@ git commit -m "feat: vision_follower 视觉+雷达融合控制器(3态状态机+
 **Interfaces:**
 - Produces: `follow_vision.launch`（PC 端一键启动 person_detector + vision_follower，参数透传 follow_dist/max_speed/hfov）
 
-- [ ] **Step 1: 创建 follow_vision.launch**
+- [x] **Step 1: 创建 follow_vision.launch**
 
 Create `src/robot_bringup/launch/follow_vision.launch`:
 
@@ -732,7 +732,7 @@ Create `src/robot_bringup/launch/follow_vision.launch`:
 </launch>
 ```
 
-- [ ] **Step 2: 更新 CMakeLists.txt**
+- [x] **Step 2: 更新 CMakeLists.txt**
 
 Modify `src/robot_bringup/CMakeLists.txt` — 在 `catkin_install_python(PROGRAMS` 块中加入两行:
 
@@ -748,7 +748,7 @@ catkin_install_python(PROGRAMS
 )
 ```
 
-- [ ] **Step 3: 更新 SETUP.md — 追加视觉跟随部署章节**
+- [x] **Step 3: 更新 SETUP.md — 追加视觉跟随部署章节**
 
 Append to `SETUP.md`:
 
@@ -784,12 +784,12 @@ roslaunch robot_bringup follow_vision.launch follow_dist:=1.2 hfov:=70
 ```
 ```
 
-- [ ] **Step 4: 验证 launch XML 语法**
+- [x] **Step 4: 验证 launch XML 语法**
 
 Run: `python3 -c "import xml.dom.minidom; xml.dom.minidom.parse('src/robot_bringup/launch/follow_vision.launch'); print('XML OK')"`
 Expected: `XML OK`
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/robot_bringup/launch/follow_vision.launch src/robot_bringup/CMakeLists.txt SETUP.md
@@ -804,22 +804,22 @@ git commit -m "feat: follow_vision.launch 一键启动 + CMakeLists/SETUP 部署
 
 **Interfaces:** 无 — 验证整个功能链路可编译、可运行
 
-- [ ] **Step 1: 全部测试回归**
+- [x] **Step 1: 全部测试回归**
 
 Run: `python3 -m pytest tests/ -v`
 Expected: 15 tests PASS (7 detector + 8 follower)
 
-- [ ] **Step 2: catkin 编译验证**
+- [x] **Step 2: catkin 编译验证**
 
 Run: `cd build && cmake .. -DCATKIN_WHITELIST_PACKAGES="robot_bringup" && make 2>&1 | tail -5`
 Expected: 编译成功无错误（`catkin_install_python` 安装 6 个脚本）
 
-- [ ] **Step 3: 静态检查全部脚本**
+- [x] **Step 3: 静态检查全部脚本**
 
 Run: `python3 -m py_compile src/robot_bringup/scripts/person_detector.py src/robot_bringup/scripts/vision_follower.py`
 Expected: 无输出 (退出码 0)
 
-- [ ] **Step 4: 提交（如有残留变更）**
+- [x] **Step 4: 提交（如有残留变更）**
 
 Run: `git status`
 Expected: 干净工作区；若有未提交变更则 `git add -A && git commit -m "chore: 视觉跟随集成验证"`

@@ -34,7 +34,7 @@ class S9LidarDriver:
         port = rospy.get_param("~port", "/dev/ttyUSB0")
         self.frame_id = rospy.get_param("~frame_id", "laser_link")
         self.min_range = rospy.get_param("~min_range", 0.03)
-        self.max_range = rospy.get_param("~max_range", 50.0)
+        self.max_range = rospy.get_param("~max_range", 8.0)   # S9 实际量程 ~5m, 与 amcl laser_max_range=8.0 一致
 
         self.running = True
         self.frame_count = 0
