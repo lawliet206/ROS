@@ -26,22 +26,44 @@ LIDAR_LOG=/tmp/lidar.log
 CAM_LOG=/tmp/cam.log
 REPUB_LOG=/tmp/repub.log
 
+# 动态检测端口 (USB 插拔后 ttyUSB0/1 顺序会互换, 不能写死!)
+# 按芯片驱动识别: CP210x = ESP32, ch341(HL-340) = 雷达
+detect_ports() {
+  ESP32_PORT=""
+  LIDAR_PORT=""
+  for dev in /dev/ttyUSB*; do
+    [ -e "$dev" ] || continue
+    driver=$(readlink -f "/sys/class/tty/$(basename "$dev")/device/driver" 2>/dev/null | grep -oE 'cp210x|ch341-uart')
+    case "$driver" in
+      cp210x)     ESP32_PORT="$dev" ;;
+      ch341-uart) LIDAR_PORT="$dev" ;;
+    esac
+  done
+  if [ -n "$ESP32_PORT" ] && [ -n "$LIDAR_PORT" ]; then
+    echo "  端口检测: ESP32=$ESP32_PORT 雷达=$LIDAR_PORT"
+  else
+    echo "  ✗ 端口检测失败 (确认 ESP32/雷达 USB 已连接)"
+  fi
+}
+
 start_esp32() {
+  detect_ports
+  [ -n "$ESP32_PORT" ] || return 1
   if pgrep -f "[s]erial_node" > /dev/null; then
     echo "  ESP32 已在运行"
   else
-    echo "  自动复位 ESP32 (DTR/RTS 信号)..."
+    echo "  自动复位 ESP32 ($ESP32_PORT, DTR/RTS 信号)..."
     python3 -c "
 import serial, time
-ser = serial.Serial('/dev/ttyUSB0', 460800, timeout=0.1)
+ser = serial.Serial('$ESP32_PORT', 230400, timeout=0.1)
 ser.setDTR(False); ser.setRTS(True); time.sleep(0.6)   # EN=low 600ms 确保复位
 ser.setRTS(False); time.sleep(0.8)                      # EN=high, 等 ESP32 上电
 ser.reset_input_buffer()                                # 清空复位期间残留数据
 ser.close()
 "
     sleep 2   # 等 ESP32 完全启动 (initNode 前)
-    echo "  启动 ESP32 rosserial (460800)..."
-    nohup rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=230400 > $ESP32_LOG 2>&1 &
+    echo "  启动 ESP32 rosserial (230400)..."
+    nohup rosrun rosserial_python serial_node.py _port:=$ESP32_PORT _baud:=230400 > $ESP32_LOG 2>&1 &
     sleep 6
     pgrep -f "[s]erial_node" > /dev/null \
       && echo "  ✓ ESP32 已启动 (自动复位握手)" \
@@ -50,11 +72,13 @@ ser.close()
 }
 
 start_lidar() {
+  detect_ports
+  [ -n "$LIDAR_PORT" ] || return 1
   if pgrep -f "[s]9_lidar_driver" > /dev/null; then
     echo "  雷达已在运行"
   else
-    echo "  启动雷达驱动..."
-    nohup rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1 > $LIDAR_LOG 2>&1 &
+    echo "  启动雷达驱动 ($LIDAR_PORT)..."
+    nohup rosrun robot_bringup s9_lidar_driver.py _port:=$LIDAR_PORT > $LIDAR_LOG 2>&1 &
     sleep 4
     pgrep -f "[s]9_lidar_driver" > /dev/null \
       && echo "  ✓ 雷达已启动" \
