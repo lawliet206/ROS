@@ -73,6 +73,31 @@ def find_nearest_human_dist(scan, min_dist, max_dist, cluster_tol, min_points,
                       sum(p[1] for p in best) / len(best))
 
 
+def compute_cmd(angle, dist, target_dist, kp_linear, kp_angular,
+                max_linear, max_angular):
+    """跟随控制: 角度→角速度, 距离误差→线速度
+
+    雷达丢失 (dist=None) 时只旋转对准不前进, 防止盲目前冲撞墙 (规格 §6.1).
+
+    Args:
+        angle: 目标偏角 (rad, 左正右负)
+        dist: 目标距离 (m); None=雷达丢失
+    Returns:
+        geometry_msgs/Twist
+    """
+    cmd = Twist()
+    abs_angle = abs(angle)
+    if abs_angle > 0.08:
+        cmd.angular.z = max(-max_angular, min(max_angular,
+                                              kp_angular * angle))
+    if dist is not None and abs_angle < 0.3:
+        err = dist - target_dist
+        if abs(err) > 0.15:
+            cmd.linear.x = max(-max_linear, min(max_linear,
+                                                kp_linear * err))
+    return cmd
+
+
 class FollowStateMachine:
     """融合跟随状态机: FOLLOW → SEARCH → STOP
 
@@ -221,7 +246,10 @@ class VisionFollower:
                 self.target_angle_ema = 0.4 * self.angle + 0.6 * self.target_angle_ema
                 if self.latest_dist is not None:
                     self.target_dist_ema = 0.4 * self.latest_dist + 0.6 * self.target_dist_ema
-                cmd = self._control(self.target_angle_ema, self.target_dist_ema)
+                    cmd = self._control(self.target_angle_ema, self.target_dist_ema)
+                else:
+                    # 雷达丢失: 只转不前进 (规格 §6.1)
+                    cmd = self._control(self.target_angle_ema, None)
             self.cmd_pub.publish(cmd)
 
         elif state == FollowStateMachine.SEARCH:
@@ -245,18 +273,11 @@ class VisionFollower:
         self.lock_counter = 0
 
     def _control(self, angle, dist):
-        cmd = Twist()
-        abs_angle = abs(angle)
-        if abs_angle > 0.08:
-            cmd.angular.z = max(-self.max_angular, min(self.max_angular,
-                                                       self.kp_angular * angle))
-        if abs_angle < 0.3:
-            err = dist - self.target_dist
-            if abs(err) > 0.15:
-                cmd.linear.x = max(-self.max_linear, min(self.max_linear,
-                                                         self.kp_linear * err))
+        cmd = compute_cmd(angle, dist, self.target_dist, self.kp_linear,
+                          self.kp_angular, self.max_linear, self.max_angular)
         rospy.loginfo_throttle(1, "[Follow] dist=%.2fm angle=%.0f° | v=%.2f w=%.2f",
-                               dist, math.degrees(angle), cmd.linear.x, cmd.angular.z)
+                               dist if dist is not None else -1.0,
+                               math.degrees(angle), cmd.linear.x, cmd.angular.z)
         return cmd
 
 

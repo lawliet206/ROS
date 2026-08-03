@@ -4,7 +4,35 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "robot_bringup", "scripts"))
 
-from vision_follower import FollowStateMachine, find_nearest_human_dist
+from vision_follower import FollowStateMachine, find_nearest_human_dist, compute_cmd
+
+
+def test_compute_cmd_radar_lost_no_forward():
+    # 雷达丢失 (dist=None): 只转不前进 (规格 §6.1)
+    cmd = compute_cmd(0.2, None, 1.0, 0.4, 0.5, 0.5, 0.8)
+    assert cmd.linear.x == 0.0
+    assert cmd.angular.z > 0.0
+
+
+def test_compute_cmd_far_target_forward():
+    # 距离远: 前进
+    cmd = compute_cmd(0.0, 3.0, 1.0, 0.4, 0.5, 0.5, 0.8)
+    assert cmd.linear.x > 0.0
+    assert cmd.angular.z == 0.0
+
+
+def test_compute_cmd_angle_deadzone():
+    # 角度小于死区: 不转, 距离误差大则前进
+    cmd = compute_cmd(0.05, 3.0, 1.0, 0.4, 0.5, 0.5, 0.8)
+    assert cmd.angular.z == 0.0
+    assert cmd.linear.x > 0.0
+
+
+def test_compute_cmd_angle_priority():
+    # 角度大: 只转不前进 (先对准再靠近)
+    cmd = compute_cmd(0.5, 3.0, 1.0, 0.4, 0.5, 0.5, 0.8)
+    assert cmd.angular.z > 0.0
+    assert cmd.linear.x == 0.0
 
 
 class FakeScan:

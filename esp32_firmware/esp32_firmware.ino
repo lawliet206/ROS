@@ -602,13 +602,13 @@ void loop() {
     imu_msg.angular_velocity.y = -imu_gx;
     imu_msg.angular_velocity.z =  imu_gz;
 
-    // base_link 系姿态角: 互补滤波角按 imu 轴定义, 映射到 base 轴需互换 roll/pitch:
-    //   base roll  (绕车头轴 X) = cf_pitch (绕 imu Y=车头轴)
-    //   base pitch (绕左右轴 Y) = cf_roll  (绕 imu X=左右轴)
-    //   base yaw   (绕上轴   Z) = cf_yaw   (绕 imu Z=上轴, 同向且零位对齐, 无需旋转)
-    float half_roll  = cf_pitch * 0.5f;
-    float half_pitch = cf_roll * 0.5f;
-    float half_yaw   = cf_yaw * 0.5f;
+    // base_link 系姿态角: 互补滤波角按 imu 轴定义, 映射到 base 轴需互换 roll/pitch 且 pitch 取反:
+    //   base roll  (绕车头轴 X) =  cf_pitch (绕 imu Y=车头轴, 与 ωx=+imu_gy 一致)
+    //   base pitch (绕左右轴 Y) = -cf_roll  (绕 imu X=左右轴, 与 ωy=-imu_gx 一致)
+    //   base yaw   (绕上轴   Z) =  cf_yaw   (绕 imu Z=上轴, 同向且零位对齐, 无需旋转)
+    float half_roll  =  cf_pitch * 0.5f;
+    float half_pitch = -cf_roll * 0.5f;
+    float half_yaw   =  cf_yaw * 0.5f;
     float cr = cos(half_roll), sr = sin(half_roll);
     float cp = cos(half_pitch), sp = sin(half_pitch);
     float cy = cos(half_yaw), sy = sin(half_yaw);
