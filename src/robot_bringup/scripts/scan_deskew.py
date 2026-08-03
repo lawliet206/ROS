@@ -79,17 +79,22 @@ class ScanDeskew:
 
         corrected = LaserScan()
         corrected.header = scan.header
+        # 数据按"扫描起始时刻"补偿, 时间戳也改为起始时刻, 保证下游 TF 查找时刻与数据一致
+        # (否则转弯时 TF 用结束时刻, 与实际补偿参考错位, 导致地图重影)
+        corrected.header.stamp = rospy.Time(scan_start)
         corrected.angle_min = scan.angle_min
         corrected.angle_max = scan.angle_max
         corrected.angle_increment = scan.angle_increment
-        corrected.time_increment = scan.time_increment
+        # 重排后点的时间不再线性递增 (时间与角度解耦), time_increment 置 0
+        # 防止时间感知消费者按原增量重复补偿. scan_time 保留 (整圈周期语义不变).
+        corrected.time_increment = 0.0
         corrected.scan_time = scan.scan_time
         corrected.range_min = scan.range_min
         corrected.range_max = scan.range_max
-        corrected.intensities = list(scan.intensities) if scan.intensities else []
 
         # 逐点校正: 点 i 的时间偏移 → 该点的旋转角 → 修正角度
         new_ranges = [float('inf')] * N
+        new_intensities = [0.0] * N
 
         for i in range(N):
             r = scan.ranges[i]
@@ -116,8 +121,12 @@ class ScanDeskew:
                 bi -= N
             if r < new_ranges[bi]:
                 new_ranges[bi] = r
+                # 强度与距离同步重排, 保持索引对应
+                if scan.intensities and i < len(scan.intensities):
+                    new_intensities[bi] = scan.intensities[i]
 
         corrected.ranges = new_ranges
+        corrected.intensities = new_intensities if scan.intensities else []
         self.scan_pub.publish(corrected)
 
         rospy.loginfo_throttle(5.0,

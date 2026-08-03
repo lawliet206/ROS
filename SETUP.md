@@ -24,10 +24,10 @@
   - [7.1 SLAM 建图](#71-slam-建图)
   - [7.2 多点导航](#72-多点导航)
   - [7.3 人体跟随](#73-人体跟随)
-  - [7.4 腿跟踪测试](#74-腿跟踪测试leg_tracker)
-  - [7.5 EKF 传感器融合](#75-ekf-传感器融合可选)
+  - [7.4 EKF 传感器融合](#74-ekf-传感器融合已内置自动启动)
 - [8. 快速参考](#8-快速参考)
 - [9. 常见问题](#9-常见问题)
+- [10. 视觉+雷达融合人体跟随](#10-视觉雷达融合人体跟随可选)
 
 ---
 
@@ -70,14 +70,16 @@ sudo apt install ros-noetic-robot-localization
 sudo apt install ros-noetic-teb-local-planner
 sudo apt install ros-noetic-tf ros-noetic-interactive-markers libfftw3-dev python3-scipy
 sudo apt install mesa-utils libgl1-mesa-dri libgl1-mesa-glx
-pip3 install pyserial pyyaml pykalman
 
 # 3. 编译工作空间
 cd ~/ROS
-git clone https://github.com/angusleigh/leg_tracker.git src/leg_tracker && source /opt/ros/noetic/setup.bash
+source /opt/ros/noetic/setup.bash
 catkin_init_workspace src && catkin_make
 source ~/ROS/devel/setup.bash
 echo "source ~/ROS/devel/setup.bash" >> ~/.bashrc
+
+# 4. Python 依赖 (视觉跟随 YOLOv8n + 测试)
+pip3 install --user pyserial pyyaml ultralytics pytest
 ```
 
 ### 2.2 J1900（一次性）
@@ -93,17 +95,14 @@ sudo apt install ros-noetic-ros-base python3-serial python3-pip
 sudo apt install ros-noetic-rosserial-python
 pip3 install pyserial pyyaml
 
-# 3. 从 PC 迁移工作空间
-# 先在两台机器上查看 IP:
-#   hostname -I
-# 然后设置环境变量 (以下为示例，请替换为实际 IP):
-#   export PC_IP=192.168.1.118
-#   export J1900_IP=192.168.1.200
-#
-# PC 上执行:
-#   scp -r ~/ROS lawliet@${J1900_IP}:~/
-# J1900 上:
-cd ~/ROS && source /opt/ros/noetic/setup.bash && catkin_make
+# 3. 从 PC 部署 robot_bringup 包 (J1900 只需这一个包: 雷达驱动 + launch)
+#    仿真包 robot_sim / 视觉节点 person_detector·vision_follower 均在 PC 运行, 无需部署到 J1900.
+#    PC 上执行 (替换 IP):
+#      scp -r ~/ROS/src/robot_bringup lawliet@<J1900_IP>:~/ROS/src/
+#      scp ~/ROS/src/CMakeLists.txt lawliet@<J1900_IP>:~/ROS/src/
+#    J1900 上初始化工作空间并编译:
+cd ~/ROS && source /opt/ros/noetic/setup.bash
+catkin_init_workspace src && catkin_make
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
 echo "source ~/ROS/devel/setup.bash" >> ~/.bashrc
 ```
@@ -112,7 +111,14 @@ echo "source ~/ROS/devel/setup.bash" >> ~/.bashrc
 
 Arduino IDE 打开 `esp32_firmware/esp32_firmware.ino`：
 - Board → ESP32 Dev Module，Upload Speed → 115200
-- 烧录后通过 rosserial 自动发布 `/odom` + `/imu`
+- 烧录后通过 rosserial 自动发布 `/odom` + `/imu`，订阅 `/cmd_vel`
+
+**注意**：固件内 rosserial 波特率固定为 **460800**（`Serial.begin(460800)`），
+J1900 启动 `serial_node.py` 时必须带 `_baud:=460800`，否则连不上。
+（Arduino 上传速度 115200 是烧录用的，与 rosserial 运行波特率无关。）
+
+固件功能：PCNT 硬件编码器（不漏脉冲）、双路 PID、MPU6050 IMU（已旋转到 base_link 帧）、
+500ms→800ms 看门狗（无指令自动停车）、堵转检测（切 PWM 等指令降回后自动恢复）。
 
 ---
 
@@ -344,6 +350,8 @@ rosrun map_server map_saver -f ~/maps/lab_map
 
 ### 7.3 人体跟随
 
+**方案 A：纯激光跟随**（简单，角度分辨率受雷达 9.2° 限制）
+
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
@@ -351,30 +359,24 @@ rosrun map_server map_saver -f ~/maps/lab_map
 | 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
 | 4 | PC | `roslaunch robot_bringup follow.launch start_lidar:=false` |
 
----
-
-### 7.4 腿跟踪测试（leg_tracker）
-
-用机器学习腿检测器替代原生激光聚类，输出人的精确位置。
+**方案 B：视觉+雷达融合跟随**（推荐，角度来自 YOLO 视觉 ±2~3°，距离来自雷达）
+前置：J1900 已启动摄像头推流（见[第 10 章](#10-视觉雷达融合人体跟随可选)）
 
 | # | 设备 | 命令 |
 |---|------|------|
 | 1 | PC | `roscore` |
 | 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB0 _baud:=460800` |
 | 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB1` |
-| 4 | PC | `python3 -c "import rospy; rospy.init_node('s'); rospy.set_param('/robot_description', open('$HOME/ROS/src/robot_bringup/urdf/robot.urdf').read())" & rosrun robot_state_publisher robot_state_publisher` |
-| 5 | PC | `roslaunch leg_tracker joint_leg_tracker.launch scan:=/scan fixed_frame:=laser_link confidence_threshold_to_maintain_track:=-1.0 dist_travelled_together_to_initiate_leg_pair:=0.1 max_leg_pairing_dist:=1.2` |
+| 4 | J1900 | 摄像头推流 (usb_cam + republish, 见第 10 章) |
+| 5 | PC | `roslaunch robot_bringup follow_vision.launch` |
 
-验证：另开终端 `rostopic echo /people_tracked`，看到 `person_id` 即成功。
+### 7.4 EKF 传感器融合（已内置，自动启动）
 
----
+EKF 融合 ESP32 的 `/odom`（编码器）和 `/imu`（MPU6050），输出 `/odometry/filtered` 与 odom→base_footprint TF。
 
-### 7.5 EKF 传感器融合（已内置，自动启动）
+**节点定义在共享文件 `odom_ekf.launch` 中（单一来源）**，由 `ekf.launch` / `slam.launch` / `navigation.launch` 三者 include，无需手动启动。
 
-EKF 融合 ESP32 的 `/odom`（编码器）和 `/imu`（MPU6050），输出 `/odometry/filtered`。
-
-**已内置在 `slam.launch` / `navigation.launch` 内**，无需手动启动。
-同节点名 `ekf_localization` 天然防重复 — 谁先启谁生效。
+> ⚠️ **勿同时启动多个含 EKF 的 launch**——同名节点 `ekf_localization` 后注册者会抢占踢掉先注册者，期间 TF 短暂中断，AMCL 可能失锁。
 
 如需单独调试：
 ```bash
@@ -407,7 +409,7 @@ rostopic echo /odometry/filtered -n1
 | PC | `rosrun map_server map_saver -f ~/maps/lab_map` | 保存地图 |
 | PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` | 导航 (自动等话题+冲突检测) |
 | PC | `roslaunch robot_bringup follow.launch start_lidar:=false` | 激光跟随 |
-| PC | `roslaunch leg_tracker joint_leg_tracker.launch scan:=/scan fixed_frame:=laser_link` | 腿跟踪 |
+| PC | `roslaunch robot_bringup follow_vision.launch` | 视觉+雷达融合跟随 (需 J1900 摄像头推流) |
 
 ---
 
@@ -452,6 +454,7 @@ rosrun image_transport republish raw in:=/usb_cam/image_raw compressed out:=/ima
 
 ### PC 端（一次性安装）
 
+若 [2.1](#21-pc-一次性) 已安装 `ultralytics pytest` 可跳过：
 ```bash
 pip3 install --user ultralytics pytest
 ```

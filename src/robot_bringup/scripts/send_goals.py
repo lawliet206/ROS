@@ -90,12 +90,20 @@ class GoalSender:
             raw = data.get("goals", [])
             rospy.loginfo("[Nav] 从文件加载: %s", goal_file)
         else:
-            # 从参数加载 (JSON 格式)
-            goals_str = rospy.get_param("~goals", "[]")
-            try:
-                raw = json.loads(goals_str)
-            except json.JSONDecodeError:
-                rospy.logerr("[Nav] 无法解析 goals 参数: %s", goals_str)
+            # 从参数加载
+            goals_param = rospy.get_param("~goals", "[]")
+            if isinstance(goals_param, str):
+                # rosrun 命令行 _goals:="[[1,2,0]]" — 参数按字符串存储
+                try:
+                    raw = json.loads(goals_param)
+                except json.JSONDecodeError:
+                    rospy.logerr("[Nav] 无法解析 goals 参数: %s", goals_param)
+                    return []
+            elif isinstance(goals_param, list):
+                # roslaunch <param name="goals" value="[[1,2,0]]"/> — 已被参数服务器按 YAML 解析为 list
+                raw = goals_param
+            else:
+                rospy.logerr("[Nav] goals 参数类型不支持: %s", type(goals_param).__name__)
                 return []
 
         # 转换为 (x, y, yaw) 元组

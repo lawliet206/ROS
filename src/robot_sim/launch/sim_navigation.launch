@@ -82,17 +82,28 @@
        {name: inflation, type: "costmap_2d::InflationLayer"}]
     </rosparam>
 
-    <!-- 障碍物层 -->
-    <param name="obstacle_layer/observation_sources" value="scan"/>
-    <param name="obstacle_layer/scan/topic" value="/scan"/>
-    <param name="obstacle_layer/scan/marking" value="true"/>
-    <param name="obstacle_layer/scan/clearing" value="true"/>
-    <param name="obstacle_layer/scan/obstacle_range" value="3.0"/>
-    <param name="obstacle_layer/scan/raytrace_range" value="3.5"/>
+    <!-- 障碍物层: 参数前缀必须带 <costmap>/<插件名>/, 插件列表见上方 plugins (name: obstacles) -->
+    <param name="global_costmap/obstacles/observation_sources" value="scan"/>
+    <param name="global_costmap/obstacles/scan/topic" value="/scan"/>
+    <param name="global_costmap/obstacles/scan/data_type" value="LaserScan"/>   <!-- 默认 PointCloud2, 需显式指定 -->
+    <param name="global_costmap/obstacles/scan/marking" value="true"/>
+    <param name="global_costmap/obstacles/scan/clearing" value="true"/>
+    <param name="global_costmap/obstacles/scan/obstacle_range" value="3.0"/>
+    <param name="global_costmap/obstacles/scan/raytrace_range" value="3.5"/>
+
+    <param name="local_costmap/obstacles/observation_sources" value="scan"/>
+    <param name="local_costmap/obstacles/scan/topic" value="/scan"/>
+    <param name="local_costmap/obstacles/scan/data_type" value="LaserScan"/>
+    <param name="local_costmap/obstacles/scan/marking" value="true"/>
+    <param name="local_costmap/obstacles/scan/clearing" value="true"/>
+    <param name="local_costmap/obstacles/scan/obstacle_range" value="3.0"/>
+    <param name="local_costmap/obstacles/scan/raytrace_range" value="3.5"/>
 
     <!-- 膨胀层: 调小让路更宽 -->
-    <param name="inflation_layer/inflation_radius" value="0.20"/>
-    <param name="inflation_layer/cost_scaling_factor" value="5.0"/>
+    <param name="global_costmap/inflation/inflation_radius" value="0.20"/>
+    <param name="global_costmap/inflation/cost_scaling_factor" value="5.0"/>
+    <param name="local_costmap/inflation/inflation_radius" value="0.20"/>
+    <param name="local_costmap/inflation/cost_scaling_factor" value="5.0"/>
 
     <!-- TEB 参数 -->
     <param name="TebLocalPlannerROS/max_vel_x" value="0.6"/>

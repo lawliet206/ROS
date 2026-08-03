@@ -181,6 +181,7 @@ class VisionFollower:
         self.person_visible = False
         self.last_vision_time = rospy.Time.now()
         self.latest_dist = None
+        self.last_scan_time = rospy.Time.now()   # 雷达消息时间戳, 用于新鲜度判断
         self.locked = False
         self.lock_counter = 0
         self.target_angle_ema = 0.0
@@ -207,6 +208,7 @@ class VisionFollower:
         rospy.loginfo("[Follow] 已停止")
 
     def scan_callback(self, scan):
+        self.last_scan_time = scan.header.stamp
         self.latest_dist = find_nearest_human_dist(
             scan, self.min_dist, self.max_dist, self.cluster_tol,
             self.min_points, self.min_body_width, self.max_body_width)
@@ -231,6 +233,11 @@ class VisionFollower:
         state, angular = self.sm.update(visible, dt)
         cmd = Twist()
 
+        # 雷达新鲜度: 距离数据超过 0.5s 未更新视为丢失 (雷达断流/节点卡死兜底),
+        # 此时只转不前进, 防止用旧距离盲目前冲 (见 compute_cmd dist=None 分支)
+        radar_fresh = (self.latest_dist is not None and
+                       (now - self.last_scan_time).to_sec() < 0.5)
+
         if state == FollowStateMachine.FOLLOW:
             if not visible:
                 self._decay_lock()
@@ -240,11 +247,11 @@ class VisionFollower:
             if not self.locked and self.lock_counter >= self.min_lock_frames:
                 self.locked = True
                 self.target_angle_ema = self.angle
-                self.target_dist_ema = self.latest_dist if self.latest_dist is not None else self.target_dist
+                self.target_dist_ema = self.latest_dist if radar_fresh else self.target_dist
                 rospy.loginfo("[Follow] 锁定目标")
             if self.locked:
                 self.target_angle_ema = 0.4 * self.angle + 0.6 * self.target_angle_ema
-                if self.latest_dist is not None:
+                if radar_fresh:
                     self.target_dist_ema = 0.4 * self.latest_dist + 0.6 * self.target_dist_ema
                     cmd = self._control(self.target_angle_ema, self.target_dist_ema)
                 else:
