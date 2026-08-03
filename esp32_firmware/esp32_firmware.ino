@@ -592,18 +592,23 @@ void loop() {
     imu_msg.header.stamp = nh.now();
     imu_msg.header.frame_id = "base_link";
 
-    // 旋转 IMU 数据到 base_link 帧 (R_z(π/2): imu→base)
+    // 旋转 IMU 数据到 base_link 帧 (R_z(-π/2): imu→base)
     // imu_link: X=右, Y=前进, Z=上  →  base_link: X=前进, Y=左, Z=上
-    imu_msg.linear_acceleration.x = -imu_ay;   // 前进 = -(imu Y=前进→后?)
-    imu_msg.linear_acceleration.y =  imu_ax;   // 左 = imu X=右→左
+    // 变换矩阵: x_base = +y_imu, y_base = -x_imu (与 URDF imu_joint rpy="0 0 -1.5708" 一致, 实车确认 Y 朝车头)
+    imu_msg.linear_acceleration.x =  imu_ay;   // 前进 = imu Y
+    imu_msg.linear_acceleration.y = -imu_ax;   // 左 = -imu X (右→左)
     imu_msg.linear_acceleration.z =  imu_az;
-    imu_msg.angular_velocity.x = -imu_gy;
-    imu_msg.angular_velocity.y =  imu_gx;
+    imu_msg.angular_velocity.x =  imu_gy;
+    imu_msg.angular_velocity.y = -imu_gx;
     imu_msg.angular_velocity.z =  imu_gz;
 
-    float half_roll = cf_roll * 0.5f;
-    float half_pitch = cf_pitch * 0.5f;
-    float half_yaw = cf_yaw * 0.5f;
+    // base_link 系姿态角: 互补滤波角按 imu 轴定义, 映射到 base 轴需互换 roll/pitch:
+    //   base roll  (绕车头轴 X) = cf_pitch (绕 imu Y=车头轴)
+    //   base pitch (绕左右轴 Y) = cf_roll  (绕 imu X=左右轴)
+    //   base yaw   (绕上轴   Z) = cf_yaw   (绕 imu Z=上轴, 同向且零位对齐, 无需旋转)
+    float half_roll  = cf_pitch * 0.5f;
+    float half_pitch = cf_roll * 0.5f;
+    float half_yaw   = cf_yaw * 0.5f;
     float cr = cos(half_roll), sr = sin(half_roll);
     float cp = cos(half_pitch), sp = sin(half_pitch);
     float cy = cos(half_yaw), sy = sin(half_yaw);
