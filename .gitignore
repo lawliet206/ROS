@@ -28,3 +28,6 @@ YDLIDAR/ydlidar_ws/log
 # YOLO 模型权重 (person_detector 首次运行自动下载)
 yolov8n.pt
 .roscore.log
+
+# 运行时日志 (robot_start.sh / j1900_start.sh 输出)
+.robot_logs/
