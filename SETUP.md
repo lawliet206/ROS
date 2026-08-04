@@ -16,18 +16,18 @@
   - [4.5 电池电压检测](#45-电池电压检测)
   - [4.6 串口权限](#46-串口权限)
 - [5. 首次上电](#5-首次上电安全流程)
+  - [5.1 实机验证基线](#51-实机验证基线2026-08-04)
 - [6. 仿真操作](#6-仿真操作pc-单机)
   - [6.1 SLAM 建图](#61-slam-建图)
   - [6.2 导航](#62-导航)
   - [6.3 激光跟随](#63-激光跟随)
 - [7. 实物操作](#7-实物操作)
   - [7.1 SLAM 建图](#71-slam-建图)
-  - [7.2 多点导航](#72-多点导航)
-  - [7.3 人体跟随](#73-人体跟随)
+  - [7.2 多点巡航](#72-多点巡航)
+  - [7.3 人体跟踪](#73-人体跟踪)
   - [7.4 EKF 传感器融合](#74-ekf-传感器融合已内置自动启动)
 - [8. 快速参考](#8-快速参考)
 - [9. 常见问题](#9-常见问题)
-- [10. 视觉+雷达融合人体跟随](#10-视觉雷达融合人体跟随可选)
 
 ---
 
@@ -80,7 +80,13 @@ echo "source ~/ROS/devel/setup.bash" >> ~/.bashrc
 
 # 4. Python 依赖 (视觉跟随 YOLOv8n + 测试)
 pip3 install --user pyserial pyyaml ultralytics pytest
+
+# 5. YOLOv8n COCO 权重必须位于工作空间根目录（人体类别 class 0）
+test -f ~/ROS/yolov8n.pt
 ```
+
+若最后一条命令提示文件不存在，请先把 `yolov8n.pt` 放到 `~/ROS/yolov8n.pt`；人体跟踪
+按离线模式加载该文件，不会在启动小车时临时下载模型。
 
 ### 2.2 J1900（一次性）
 
@@ -101,12 +107,14 @@ pip3 install pyserial pyyaml
 echo 'KERNEL=="ttyUSB*", MODE="0666"' | sudo tee /etc/udev/rules.d/99-usb-serial.rules
 sudo udevadm control --reload-rules
 
-# 3. 从 PC 部署 robot_bringup 包 (J1900 只需这一个包: 雷达驱动 + launch)
-#    仿真包 robot_sim / 视觉节点 person_detector·vision_follower 均在 PC 运行, 无需部署到 J1900.
-#    PC 上执行 (替换 IP):
-#      scp -r ~/ROS/src/robot_bringup lawliet@<J1900_IP>:~/ROS/src/
-#      scp ~/ROS/src/CMakeLists.txt lawliet@<J1900_IP>:~/ROS/src/
-#    J1900 上初始化工作空间并编译:
+# 3. 停用旧的 systemd 串口服务，统一由一键脚本管理
+sudo systemctl disable --now rosserial.service 2>/dev/null || true
+
+# 4. 从 PC 部署 robot_bringup 包（在 PC 执行；--delete 会同步删除旧脚本）
+# rsync -av --delete --exclude='__pycache__/' --exclude='*.pyc' \
+#   ~/ROS/src/robot_bringup/ lawliet@lawliet.local:~/ROS/src/robot_bringup/
+
+# 5. 在 J1900 编译
 cd ~/ROS && source /opt/ros/noetic/setup.bash
 catkin_init_workspace src && catkin_make
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
@@ -119,8 +127,8 @@ Arduino IDE 打开 `esp32_firmware/esp32_firmware.ino`：
 - Board → ESP32 Dev Module，Upload Speed → 115200
 - 烧录后通过 rosserial 自动发布 `/odom` + `/imu`，订阅 `/cmd_vel`
 
-**注意**：固件内 rosserial 波特率固定为 **230400**（`Serial.begin(230400)`），
-J1900 启动 `serial_node.py` 时必须带 `_baud:=230400`，否则连不上。
+**注意**：固件内 rosserial 运行波特率固定为 **115200**（`ROSSERIAL_BAUD`），J1900
+启动 `serial_node.py` 时必须带 `_baud:=115200`，否则无法协商话题。
 （Arduino 上传速度 115200 是烧录用的，与 rosserial 运行波特率无关。）
 
 固件功能：PCNT 硬件编码器（不漏脉冲）、双路 PID、MPU6050 IMU（已旋转到 base_link 帧）、
@@ -128,8 +136,13 @@ J1900 启动 `serial_node.py` 时必须带 `_baud:=230400`，否则连不上。
 
 **⚠️ ESP32 连接注意（实车经验）**：
 - `serial_node.py` 要**保持常驻**（不要反复重启）
-- 若反复重启后握手失败（日志 `Mismatched protocol version`）→ **按 ESP32 的 EN/RST 键复位**后再启动 serial_node
-- 230400 波特率是吞吐必需（odom+imu 33Hz ≈ 17KB/s），不要降到 115200（会丢数据）
+- `j1900_start.sh` 启动桥接前会使用 DTR/RTS 复位 ESP32，使其重新发送 TopicInfo
+- `/odom` 的 ROS 序列化长度是 718 bytes，必须使用固件中的 1024-byte 发布缓冲：
+  `ros::NodeHandle_<ArduinoHardware, 25, 25, 512, 1024>`
+- 使用默认 512-byte 发布缓冲会在第一帧 `/odom` 序列化时破坏内存，表现为话题注册成功、
+  启动日志只有几帧，随后 `/odom` 无新消息且电机不响应；这不是 MPU6050/I2C 卡死
+- 连接日志必须出现 `publish buffer size is 1024 bytes`。正常情况下 `/odom` 约 8Hz、
+  `/imu` 约 4Hz；两者错峰发送，合计约 7.3KB/s，为 115200 串口保留吞吐余量
 
 ---
 
@@ -177,11 +190,11 @@ source ~/.bashrc
 ### 3.4 验证
 
 ```bash
-# PC 启动 roscore (推荐用持久脚本, PC 重启后需重跑)
-bash ~/ROS/start_roscore.sh
+# PC 验证免密 SSH；一键脚本会自行启动 roscore
+ssh -o BatchMode=yes lawliet@lawliet.local "echo ssh-ok"
 
-# J1900 测试能否连上 Master
-rostopic list   # 应看到 /rosout 和 /rosout_agg
+# 查看 PC/J1900 状态（不启动电机控制）
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh status
 ```
 
 > ⚠️ 如果 J1900 的 `rostopic list` 卡住：PC 和 J1900 互相 `ping` 对方 IP，确认在同一网络。关闭 PC 防火墙：`sudo ufw disable`。
@@ -256,33 +269,86 @@ sudo udevadm control --reload-rules
 
 每次开机确认：
 ```bash
-ls /dev/ttyUSB*   # USB0=激光雷达  USB1=ESP32
+ls -l /dev/serial/by-id/
+readlink -f /dev/serial/by-id/*
 ```
+
+不要假设 `/dev/ttyUSB0` 和 `/dev/ttyUSB1` 的编号固定，USB 插拔后编号可能互换。按 USB
+芯片识别设备：
+
+| USB 标识/驱动 | 设备 |
+|---------------|------|
+| `Silicon_Labs_CP2102` / `cp210x` | ESP32 |
+| `1a86_USB_Serial` / `ch341-uart` | S9 雷达 |
+
+`j1900_start.sh` 会按驱动动态检测端口，不依赖 `/dev/ttyUSB0`、`/dev/ttyUSB1` 的顺序。
 
 ---
 
 ## 5. 首次上电安全流程
 
-**车轮架起来（悬空）测试：**
+**必须先把车轮架起来（悬空）测试，并保证有人可以立即断电。**
 
 1. 万用表确认 TB6612FNG VM = 电池电压（~11-12V）
 2. 电池上电 → ESP32 亮灯
-3. J1900 启动 ESP32（一键脚本, 自动复位 + 动态端口检测）：
+3. 确认 J1900 的旧串口服务已停用（只需做一次）：
    ```bash
-   bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1
+   ssh -t lawliet@lawliet.local 'sudo systemctl disable --now rosserial.service'
    ```
-   然后 PC 端 `rostopic echo /odom -n1` 有数据即连接成功
-
-4. 测试电机：
+4. 在 PC 一键启动 SLAM。脚本会自动启动 roscore、通过 SSH 启动 J1900 的 ESP32 和雷达、
+   等待真实消息，再启动 gmapping 和键盘窗口：
    ```bash
-   rostopic pub /cmd_vel geometry_msgs/Twist '{linear: {x: 0.3}}' -r 1
-   # Ctrl-C 停止
-   rostopic pub /cmd_vel geometry_msgs/Twist '{}' -1
+   bash ~/ROS/src/robot_bringup/scripts/robot_start.sh slam
+   ```
+5. PC 验证通信，必须连续观察而不是只确认话题名称存在：
+   ```bash
+   export ROS_IP=10.80.147.11
+   export ROS_MASTER_URI=http://10.80.147.11:11311
+   rosnode ping -c 2 /serial_node
+   rostopic hz /odom
+   rostopic hz /imu
    ```
 
-5. 检查数据：`rostopic echo /odom -n1`
-6. 手动转轮子，看里程计变化
-7. 全部正常 → 轮子着地 → 正式运行
+   预期：`/serial_node` 的 URI 指向 J1900，`/odom` 约 8Hz、`/imu` 约 4Hz，持续数十秒
+   无断流。若 PC 的 `ROS_IP` 误设为 `127.0.0.1`，J1900 无法回连 PC 上的话题节点。
+
+6. 分别点动左右电机。以下每段只运行 2 秒，`timeout` 结束后必须发送零速度：
+   ```bash
+   # 左轮单独正转：v_left=0.40m/s, v_right=0
+   timeout --signal=INT 2s rostopic pub -r 20 /cmd_vel geometry_msgs/Twist \
+     '{linear: {x: 0.2}, angular: {z: -2.222222}}'
+   rostopic pub -1 /cmd_vel geometry_msgs/Twist '{}'
+
+   # 右轮单独正转：v_left=0, v_right=0.40m/s
+   timeout --signal=INT 2s rostopic pub -r 20 /cmd_vel geometry_msgs/Twist \
+     '{linear: {x: 0.2}, angular: {z: 2.222222}}'
+   rostopic pub -1 /cmd_vel geometry_msgs/Twist '{}'
+   ```
+
+7. 停止全部实物功能节点：
+   ```bash
+   bash ~/ROS/src/robot_bringup/scripts/robot_start.sh stop
+   ```
+8. 确认停止后检查：`rostopic echo /odom -n1` 中 `linear.x` 和 `angular.z` 都为 0。
+9. 手动转轮子确认编码器方向，再让车轮着地正式运行。
+
+### 5.1 实机验证基线（2026-08-04）
+
+验证拓扑：PC (`10.80.147.11`, ROS Master) → Wi-Fi → J1900 (`10.80.147.211`) →
+USB CP2102 → ESP32。
+
+| 检查项 | 实测结果 |
+|--------|----------|
+| rosserial 发布缓冲 | 1024 bytes |
+| `/odom` | 约 8Hz，分轮测试期间序号无丢失 |
+| `/imu` | 约 4Hz |
+| 左轮单独点动 2s | 编码器估算约 0.224m，峰值约 0.243m/s |
+| 右轮单独点动 2s | 编码器估算约 0.188m，峰值约 0.182m/s |
+| 启动死区补偿 | `MIN_START_PWM=350`，用于提高落地原地转向扭矩 |
+| 停车 | 零命令立即清 PWM 并拉低 STBY；微小编码器残速不重新驱动电机 |
+
+`350 PWM` 是当前实车落地标定值，会同时提高直行和转向的最低驱动力。若更换电机、轮胎、
+电池或车重，需要重新标定，不能直接沿用。
 
 ---
 
@@ -327,75 +393,94 @@ bash ~/ROS/src/robot_sim/scripts/sim_follow.sh
 
 ## 7. 实物操作
 
-> **⚠️ PC 和 J1900 每个新终端都必须先执行：`source ~/ROS/devel/setup.bash`**
-> J1900 的 `~/.bashrc` 需已配置 `ROS_MASTER_URI` 指向 PC。
+所有正式功能都从 **PC** 执行。`robot_start.sh` 会自动启动 roscore、通过免密 SSH 切换
+J1900 硬件模式、等待真实话题、停止上一个互斥功能，然后启动 PC 节点。
+
+截至 2026-08-04，一键启动实机验证状态如下：
+
+| 功能 | 命令 | 实测状态 |
+|------|------|----------|
+| SLAM 建图 | `robot_start.sh slam` | 已通过：底盘、雷达、EKF、gmapping、TF、地图和键盘控制正常 |
+| 人体跟踪 | `robot_start.sh follow` | 已通过：摄像头、YOLO、雷达融合、跟随控制和丢失目标停车正常 |
+| 多点巡航 | `robot_start.sh patrol` | 部分通过：导航链可一键启动；尚未使用合格实地图和真实安全点完成落地巡航 |
+| 状态检查 | `robot_start.sh status` | 已通过 |
+| 安全停止 | `robot_start.sh stop` | 已通过：先发送零速度，再停止 PC 与 J1900 功能节点 |
+
+因此，目前只有多点巡航的真实路线行驶未完成最终实机验证，不能将其标记为完整通过。
+
+任何时候需要停车并关闭功能节点：
+
+```bash
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh stop
+```
 
 ### 7.1 SLAM 建图
 
-| # | 设备 | 命令 |
-|---|------|------|
-| 1 | PC | `roscore` |
-| 2 | J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1` (ESP32+雷达一键) |
-| 3 | PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` |
-| 4 | PC | `rosrun teleop_twist_keyboard teleop_twist_keyboard.py`（i 前进 k 停） |
+```bash
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh slam
+```
 
-> **自动保护**: slam_start.sh 会等待 `/odom` + `/scan` 就绪(60s超时)，再启动 SLAM。
+启动成功后会自动打开键盘窗口。`i` 前进，`j/l` 原地转向，`k` 或空格停车。脚本只有在
+`/odom`、`/imu`、`/scan` 和 `/map` 都有真实数据后才报告成功。
 
 保存地图：
 ```bash
-rosrun map_server map_saver -f ~/maps/lab_map
+bash ~/ROS/src/robot_bringup/scripts/save_map.sh lab_map
 ```
 
-### 7.2 多点导航
+### 7.2 多点巡航
 
-前提：已建图。
+前提：已保存地图，并确认机器人初始位置与地图坐标一致。首次使用必须编辑实机巡航点；
+仓库模板故意保持为空，避免未经确认的坐标让实车自动运动：
 
-| # | 设备 | 命令 |
-|---|------|------|
-| 1 | PC | `roscore` |
-<<<<<<< HEAD
-| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
-| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
-| 4 | PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` |
-| 5 | PC | `rosrun robot_bringup send_goals.py _goals:="[[2,0,0],[4,2,1.57]]"` |
-=======
-| 2 | J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1` |
-| 3 | PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` |
-| 4 | PC | `rosrun robot_bringup send_goals.py _goals:="[[2,0,0],[4,2,1.57]]"` |
->>>>>>> feat: J1900一键启动脚本(j1900_start.sh 数字模式+ESP32自动复位) + SETUP部署步骤全面更新
+```bash
+nano ~/ROS/src/robot_bringup/config/patrol_goals.yaml
+```
 
-或在 RViz 用 "2D Nav Goal" 手动点目标。
+格式为地图坐标 `[x(m), y(m), yaw(rad)]`，至少两个点：
 
-### 7.3 人体跟随
+```yaml
+goals:
+  - [0.0, 0.0, 0.0]
+  - [1.0, 0.0, 0.0]
+```
 
-**方案 A：纯激光跟随**（简单，角度分辨率受雷达 9.2° 限制）
+确认各点位于地图可通行区域后，一键循环巡航：
 
-| # | 设备 | 命令 |
-|---|------|------|
-| 1 | PC | `roscore` |
-<<<<<<< HEAD
-| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
-| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
-| 4 | PC | `roslaunch robot_bringup follow.launch start_lidar:=false` |
-=======
-| 2 | J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1` |
-| 3 | PC | `roslaunch robot_bringup follow.launch start_lidar:=false` |
->>>>>>> feat: J1900一键启动脚本(j1900_start.sh 数字模式+ESP32自动复位) + SETUP部署步骤全面更新
+```bash
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh patrol
+```
 
-**方案 B：视觉+雷达融合跟随**（推荐，角度来自 YOLO 视觉 ±2~3°，距离来自雷达）
+指定其他地图和巡航点文件：
 
-| # | 设备 | 命令 |
-|---|------|------|
-| 1 | PC | `roscore` |
-<<<<<<< HEAD
-| 2 | J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` |
-| 3 | J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` |
-| 4 | J1900 | 摄像头推流 (usb_cam + republish, 见第 10 章) |
-| 5 | PC | `roslaunch robot_bringup follow_vision.launch` |
-=======
-| 2 | J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 2` (含摄像头推流) |
-| 3 | PC | `roslaunch robot_bringup follow_vision.launch` |
->>>>>>> feat: J1900一键启动脚本(j1900_start.sh 数字模式+ESP32自动复位) + SETUP部署步骤全面更新
+```bash
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh patrol \
+  ~/maps/other_map.yaml ~/path/to/other_goals.yaml
+```
+
+### 7.3 人体跟踪
+
+一键启动 J1900 的 ESP32、雷达和摄像头压缩流，以及 PC 的 YOLOv8n 人体检测与
+视觉+雷达融合控制：
+
+```bash
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow
+```
+
+视觉确定人体方向，雷达聚类确定距离；雷达数据过期时只允许转向，不会使用旧距离前冲。
+默认跟随距离为 `1.0m`，可覆盖参数：
+
+```bash
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow follow_dist:=1.2 hfov:=70
+```
+
+调试检测结果：
+
+```bash
+rostopic echo /person_visible
+rostopic echo /person_angle
+bash ~/ROS/tools/view_detection.sh
+```
 
 ### 7.4 EKF 传感器融合（已内置，自动启动）
 
@@ -415,7 +500,8 @@ rostopic echo /odometry/filtered -n1
 
 ## 8. 快速参考
 
-> 卡住/报错时先清理残留：`bash ~/ROS/tools/kill_ros.sh`
+实物模式不要使用会连 roscore 一起杀掉的 `tools/kill_ros.sh`；统一使用
+`robot_start.sh stop`，它会先发送零速度，再停止 PC 与 J1900 功能节点。
 
 ### 仿真
 
@@ -429,20 +515,21 @@ rostopic echo /odometry/filtered -n1
 
 | 在哪 | 命令 | 功能 |
 |------|------|------|
-<<<<<<< HEAD
-| J1900 | `rosrun rosserial_python serial_node.py _port:=/dev/ttyUSB1 _baud:=460800` | ESP32 桥接 |
-| J1900 | `rosrun robot_bringup s9_lidar_driver.py _port:=/dev/ttyUSB0` | 激光雷达 |
-=======
-| J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1` | ESP32 + 雷达一键启动 |
-| J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 2` | + 摄像头 (视觉跟随) |
-| J1900 | `bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 0` | 停止全部 |
->>>>>>> feat: J1900一键启动脚本(j1900_start.sh 数字模式+ESP32自动复位) + SETUP部署步骤全面更新
-| PC | `roslaunch robot_bringup ekf.launch` | EKF 传感器融合 (单独调试用) |
-| PC | `bash ~/ROS/src/robot_bringup/scripts/slam_start.sh` | SLAM 建图 (自动等话题) |
-| PC | `rosrun map_server map_saver -f ~/maps/lab_map` | 保存地图 |
-| PC | `bash ~/ROS/src/robot_bringup/scripts/nav_start.sh ~/maps/lab_map.yaml` | 导航 (自动等话题+冲突检测) |
-| PC | `roslaunch robot_bringup follow.launch start_lidar:=false` | 激光跟随 |
-| PC | `roslaunch robot_bringup follow_vision.launch` | 视觉+雷达融合跟随 (需 J1900 摄像头推流) |
+| PC | `bash ~/ROS/src/robot_bringup/scripts/robot_start.sh slam` | 一键 SLAM + 键盘窗口 |
+| PC | `bash ~/ROS/src/robot_bringup/scripts/save_map.sh lab_map` | 保存地图 |
+| PC | `bash ~/ROS/src/robot_bringup/scripts/robot_start.sh patrol` | 一键循环多点巡航 |
+| PC | `bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow` | 一键视觉+雷达人体跟踪 |
+| PC | `bash ~/ROS/src/robot_bringup/scripts/robot_start.sh status` | 查看 PC/J1900 状态 |
+| PC | `bash ~/ROS/src/robot_bringup/scripts/robot_start.sh stop` | 发零速度并停止全部实物功能节点 |
+
+仅在排查 J1900 时直接使用底层脚本：
+
+```bash
+bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh base
+bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh vision
+bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh status
+bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh stop
+```
 
 ---
 
@@ -462,70 +549,17 @@ rostopic echo /odometry/filtered -n1
 |------|------|
 | pyserial 找不到 | `pip3 install pyserial pyyaml` |
 | 串口无权限 | `sudo usermod -a -G dialout $USER` 重新登录 |
-| J1900 连不上 PC | 互 ping，确认 ROS_MASTER_URI / ROS_IP 指向 PC |
+| 一键脚本提示无法免密 SSH | 执行 `ssh-copy-id lawliet@lawliet.local`，再用 `ssh -o BatchMode=yes lawliet@lawliet.local true` 验证 |
+| J1900 连不上 PC | 互 ping；一键脚本会把当前 `PC_IP` 传给 J1900，也可手动执行 `PC_IP=<地址> robot_start.sh ...` |
+| `/serial_node` 存在但 `/odom` 无新消息 | 先检查 `/tmp/esp32.log` 必须显示 `publish buffer size is 1024 bytes`；512-byte 缓冲无法容纳 718-byte `/odom` |
+| rosserial 日志反复出现 `wrong checksum for topic id and msg` | 这是 ESP32→J1900 串口大帧损坏，不是 ROS 网络或 I2C 卡死。确认固件与 `j1900_start.sh` 都使用 115200，检查 CP2102、USB 线、USB Hub 和供电；不要只改上位机波特率 |
+| `/odom` 有时有、随后两个 `/serial_node` 互相掉线 | PC 和 J1900 同时启动了串口桥接；全网只能保留一个 `/serial_node` |
+| 插拔 USB 后串口打不开或读到雷达乱码 | 用 `/dev/serial/by-id` 或驱动识别设备，不要依赖 `ttyUSB0/1` 编号 |
+| PC 能看到话题但 J1900 数据回不来 | PC 的 `ROS_IP` 不能是 `127.0.0.1`，应设置为 Wi-Fi 地址（当前为 `10.80.147.11`） |
+| 巡航入口提示至少需要 2 个点 | 编辑 `config/patrol_goals.yaml`，只填写实机地图中已确认可通行的坐标 |
+| 巡航启动后定位不准 | 机器人起点必须与地图初始位姿一致；否则先用 RViz 的 `2D Pose Estimate` 校正，再启动巡航 |
+| 左右轮架空启动速度差异明显 | 先检查供电/接线；当前 `MIN_START_PWM=350` 是落地标定值，更换负载后需重标 |
 | rosrun/roslaunch 报 package not found | `source ~/ROS/devel/setup.bash`（每个新终端都要执行一次） |
 | Gazebo 打不开 | `export SVGA_VGPU10=0` |
-| slam_start.sh 卡在"等待话题" | J1900 上的 rosserial 或雷达驱动未启动，检查 J1900 终端 |
-| 导航和跟随能同时跑吗 | **不能** — 两者都写 `/cmd_vel`，会抢控。nav_start.sh 启动时会自动检测并警告 |
-
----
-
-## 10. 视觉+雷达融合人体跟随（可选）
-
-架构: J1900 摄像头采集推流 → PC YOLOv8n 检测 (person_detector.py) → 融合控制 (vision_follower.py)
-分工: 视觉定方向（角度 ±2~3°），雷达定距离（人体宽度约束聚类）
-
-### J1900 端（一次性安装）
-
-```bash
-sudo apt install ros-noetic-usb-cam ros-noetic-image-transport ros-noetic-compressed-image-transport
-```
-
-### J1900 端启动（一键脚本, 不再需要手动开终端）
-
-```bash
-# 模式: 0=停止全部 | 1=base(ESP32+雷达, 建图/导航用) | 2=vision(+摄像头, 视觉跟随) | 3=状态
-bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 1     # 建图/导航前
-bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 2     # 视觉跟随前
-bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 0     # 停止
-bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh 3     # 查看状态
-```
-
-> **ESP32 自动复位**：脚本启动 ESP32 前通过 DTR/RTS 信号自动复位（无需按 EN 键）。
-> 反复切换模式或 serial_node 重启导致握手失败时, 0/1 重新切一次即可自动恢复。
-
-> 推流帧率验证: `rostopic hz /image_raw/compressed` — 320x240 应 ~20Hz (PC 端), 640x480 只有 ~8Hz。
-
-### PC 端（一次性安装）
-
-```bash
-# 若 2.1 未装: pip3 install --user ultralytics pytest
-# YOLO 权重: yolov8n.pt 放 ~/ROS/ 根目录 (离线加载, 不会联网下载)
-```
-
-### PC 端启动
-
-```bash
-# PC 终端1: ROS Master
-bash ~/ROS/start_roscore.sh
-
-# PC 终端2: 仅看图像 + 检测结果 (调试用)
-bash ~/ROS/tools/view_detection.sh     # 弹出窗口显示检测框
-
-# PC 终端3: 完整融合跟随
-roslaunch robot_bringup follow_vision.launch
-```
-
-### 调试
-
-```bash
-rostopic echo /person_visible        # True/False
-rostopic echo /person_angle          # 偏角(弧度, 左正右负)
-# 或安装可视化: sudo apt install ros-noetic-rqt-image-view && rqt_image_view /person_overlay
-```
-
-### 参数（可选覆盖）
-
-```bash
-roslaunch robot_bringup follow_vision.launch follow_dist:=1.2 hfov:=70
-```
+| 一键启动后超时 | 查看 `~/.robot_logs/`；J1900 硬件日志位于 `/tmp/esp32.log`、`/tmp/lidar.log`、`/tmp/cam.log` |
+| 导航、跟踪、键盘能同时跑吗 | 不能；它们都会发布 `/cmd_vel`。`robot_start.sh` 切换模式前会先发零速度并停止旧模式 |
