@@ -27,6 +27,10 @@
   <exec_depend>topic_tools</exec_depend>
   <exec_depend>teb_local_planner</exec_depend>
   <exec_depend>tf2_geometry_msgs</exec_depend>
+  <exec_depend>teleop_twist_keyboard</exec_depend>
+  <exec_depend>usb_cam</exec_depend>
+  <exec_depend>image_transport</exec_depend>
+  <exec_depend>compressed_image_transport</exec_depend>
 
   <export>
   </export>

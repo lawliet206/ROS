@@ -24,4 +24,4 @@ rosrun map_server map_saver -f "${MAP_DIR}/${MAP_NAME}"
 
 echo ""
 echo "地图已保存到: ${MAP_DIR}/${MAP_NAME}.yaml"
-echo "导航时使用: bash nav_start.sh ${MAP_DIR}/${MAP_NAME}.yaml"
+echo "巡航时使用: bash ${HOME}/ROS/src/robot_bringup/scripts/robot_start.sh patrol ${MAP_DIR}/${MAP_NAME}.yaml"

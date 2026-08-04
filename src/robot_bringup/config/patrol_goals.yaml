@@ -1,0 +1,5 @@
+# Replace these examples with free-space coordinates from your real map.
+# Keep at least two goals. Format: [x(m), y(m), yaw(rad)].
+goals: []
+#  - [0.0, 0.0, 0.0]
+#  - [1.0, 0.0, 0.0]

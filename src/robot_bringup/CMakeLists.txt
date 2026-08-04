@@ -23,8 +23,8 @@ install(DIRECTORY launch/
 
 # 安装 shell 脚本
 install(PROGRAMS
-  scripts/slam_start.sh
-  scripts/nav_start.sh
+  scripts/robot_start.sh
+  scripts/j1900_start.sh
   scripts/save_map.sh
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
