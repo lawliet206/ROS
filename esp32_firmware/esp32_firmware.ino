@@ -51,15 +51,17 @@
 // 调参顺序: 先只调 Kp 让车轮跟得上设定转速, 再加 Ki 消除稳态误差, 最后加少量 Kd 抑制震荡
 #define MAX_RAMP_RPM_PER_SEC  100.0f          // [可调] RPM 斜坡限制 (RPM/s). 降低到 100 使起步更平缓安全
 #define RPM_FILTER_ALPHA      0.3f            // [可调] 转速低通滤波 α (0~1). 越小越平滑但响应越慢. 0.3 是默认. 高速场景需要更快响应时可加大到 0.5, 但 RPM 读数会更抖
-#define RPM_STOP_THRESHOLD    1.0f            // [可调] 停止判定 RPM 阈值. 低于此值认为电机已停, PID 复位. 设太大电机会一直微动, 太小则停下来后还有残余 PWM
 #define PID_INTEGRAL_LIMIT    2000.0f         // [可调] PID 积分上限. 限制积分项不会无限累积 (抗积分饱和). 过大 → 积分失控, 过小 → 稳态误差清不掉
 #define MAX_CMD_RPM           200.0f          // [可调] 最大允许 RPM. 200 RPM ≈ 0.89 m/s, 安全测试速度
-#define MIN_START_PWM         150.0f          // [可调] 启动死区 PWM (0~1023). TB6612 在极低 PWM 时电机不转, 需要最小值克服静摩擦力. 太小起步抖, 太大起步冲. sqrt 平滑过渡避免突然窜出
+#define MIN_START_PWM         350.0f          // [实车校准] 启动死区补偿 PWM (0~1023). 实际输出=PID输出+此值; 原地转向带载后段扭矩不足, 落地测试提升到 350
 #define PID_OUTPUT_LIMIT      1023.0f         // [可调] PID 输出上限. 10bit PWM 最大 1023. 小于此值可限制最大功率, 保护电机或省电
 
 // ========== 时序与安全 ==========
 #define LOOP_INTERVAL_US  10000                 // [可调] 主循环间隔 (μs). 10000=10ms=100Hz. 改小提高控制频率但增加 CPU 负载. 改大降低频率但编码器采样更稀疏, 高速下 RPM 估算不准
 #define WATCHDOG_TIMEOUT  800                   // [可调] 看门狗超时 (ms). 超过此时间没收到 /cmd_vel 则自动停车拉低 STBY. 设太小正常行驶中突然无指令会急停, 太大失控后要很久才自动停
+#define ROSSERIAL_BAUD     115200                // [实车校准] 230400/460800 会损坏大帧; 固件与上位机必须保持一致
+#define ODOM_PUBLISH_INTERVAL_MS  125            // 8Hz，降低 rosserial 大帧吞吐以避免偶发校验错误
+#define IMU_PUBLISH_INTERVAL_MS   250            // 4Hz，与 odom 错峰发送
 
 // ========== 堵转检测 ==========
 // 判定条件: 命令转速 ≥ STALL_DETECT_CMD_THRESH 但实际转速 < 1 RPM, 持续超过 STALL_DETECT_TIME_MS
@@ -69,7 +71,7 @@
 #define STALL_DETECT_RPM_THRESH  1.0f           // [可调] 堵转判定 RPM 阈值. RPM 降到 1 以下才算堵转
 #define STALL_DETECT_TIME_MS     2000           // [可调] 堵转确认时间 (ms). 持续 2 秒真堵转才停, 过坎不会误判 (实车调参)
 
-ros::NodeHandle nh;
+ros::NodeHandle_<ArduinoHardware, 25, 25, 512, 1024> nh;
 
 nav_msgs::Odometry odom_msg;
 sensor_msgs::Imu imu_msg;
@@ -99,7 +101,8 @@ float odom_theta = 0;
 
 int64_t last_loop_us = 0;
 int64_t prev_exec_us = 0; 
-unsigned long loop_count = 0; 
+unsigned long last_odom_publish_ms = 0;
+unsigned long last_imu_publish_ms = 0;
 unsigned long last_cmd_time = 0;
 
 unsigned long stall_timer_start_l = 0;
@@ -197,14 +200,14 @@ void setup_motors() {
   ledcAttach(PIN_R_PWM, LEDC_FREQ, LEDC_RES);
 }
 
-float apply_deadzone_ff(float pid_output) {
-    if (fabs(pid_output) < 0.01f) return 0.0f;
-    float sign = (pid_output > 0) ? 1.0f : -1.0f;
-    float abs_out = fabs(pid_output);
-    if (abs_out < MIN_START_PWM) {
-        abs_out = MIN_START_PWM * sqrtf(abs_out / MIN_START_PWM);
-    }
-    return sign * abs_out;
+float apply_deadzone_ff(float pid_output, float target_rpm) {
+  if (fabsf(target_rpm) < 0.01f) return 0.0f;
+
+  float compensated = pid_output + copysignf(MIN_START_PWM, target_rpm);
+  if (target_rpm > 0.0f) {
+    return constrain(compensated, 0.0f, PID_OUTPUT_LIMIT);
+  }
+  return constrain(compensated, -PID_OUTPUT_LIMIT, 0.0f);
 }
 
 void set_motor_raw(float left_f, float right_f) {
@@ -393,7 +396,6 @@ void read_imu() {
 }
 
 void cmdVelCallback(const geometry_msgs::Twist& msg) {
-  digitalWrite(PIN_STBY, HIGH);
   float v = msg.linear.x;
   float w = msg.angular.z;
   
@@ -407,6 +409,19 @@ void cmdVelCallback(const geometry_msgs::Twist& msg) {
   target_rpm_right = constrain(target_rpm_right, -MAX_CMD_RPM, MAX_CMD_RPM);
   
   last_cmd_time = millis();
+
+  if (fabsf(target_rpm_left) < 1.0f && fabsf(target_rpm_right) < 1.0f) {
+    target_rpm_left = 0.0f;
+    target_rpm_right = 0.0f;
+    target_rpm_left_filtered = 0.0f;
+    target_rpm_right_filtered = 0.0f;
+    set_motor_raw(0, 0);
+    digitalWrite(PIN_STBY, LOW);
+    pid_reset(pid_left);
+    pid_reset(pid_right);
+  } else {
+    digitalWrite(PIN_STBY, HIGH);
+  }
   
   if (stall_fault_l && fabs(target_rpm_left) < 1.0f) { stall_fault_l = false; stall_timer_start_l = 0; pid_reset(pid_left); }
   if (stall_fault_r && fabs(target_rpm_right) < 1.0f) { stall_fault_r = false; stall_timer_start_r = 0; pid_reset(pid_right); }
@@ -415,10 +430,9 @@ ros::Subscriber<geometry_msgs::Twist> sub_cmd("cmd_vel", &cmdVelCallback);
 
 void setup() {
   // ========== 通信参数 ==========
-  Serial.setRxBufferSize(1024);              // [可调] 串口接收缓冲区 (bytes). 460800 波特率下 1024 字节够用. 如果丢包/粘包频繁可以加大, 但 ESP32 内存有限
+  Serial.setRxBufferSize(1024);              // [可调] 串口接收缓冲区 (bytes). 115200 波特率下 1024 字节够用. 如果丢包/粘包频繁可以加大, 但 ESP32 内存有限
   Serial.setTxBufferSize(1024);              // [可调] 串口发送缓冲区 (bytes). 同上
-  Serial.begin(230400);                      // [可调] 波特率. 230400 稳定性实测优于 460800 (ESP32 时钟误差位错位: 握手 0xef/odom checksum 错/cmd_vel 丢弃).
-                                              // 发布频率降至 33Hz 后吞吐 17KB/s < 230400 容量 23KB/s
+  Serial.begin(ROSSERIAL_BAUD);
   
   pinMode(PIN_L_ENC_A, INPUT_PULLUP); pinMode(PIN_L_ENC_B, INPUT_PULLUP);
   pinMode(PIN_R_ENC_A, INPUT_PULLUP); pinMode(PIN_R_ENC_B, INPUT_PULLUP);
@@ -439,9 +453,9 @@ void setup() {
 
   // 关键: 必须显式设置 rosserial 波特率!
   // ros_lib 的 ArduinoHardware 构造函数默认波特率是 57600 (ros_lib/ArduinoHardware.h 的默认参数),
-  // 若不设置, 下面的 nh.initNode() 会调用 Serial.begin(57600) 覆盖上方 Serial.begin(230400),
-  // 导致 J1900 以 _baud:=230400 连接失败.
-  nh.getHardware()->setBaud(230400);
+  // 若不设置, 下面的 nh.initNode() 会调用 Serial.begin(57600) 覆盖上方波特率,
+  // 导致 J1900 无法连接.
+  nh.getHardware()->setBaud(ROSSERIAL_BAUD);
   nh.initNode();
   nh.advertise(pub_odom);
   nh.advertise(pub_imu);
@@ -453,6 +467,9 @@ void setup() {
   
   last_loop_us = esp_timer_get_time();
   prev_exec_us = last_loop_us;
+  unsigned long publish_start_ms = millis();
+  last_odom_publish_ms = publish_start_ms;
+  last_imu_publish_ms = publish_start_ms - 60;
 }
 
 void loop() {
@@ -476,6 +493,7 @@ void loop() {
     target_rpm_right = 0;
     target_rpm_left_filtered = 0;
     target_rpm_right_filtered = 0;
+    set_motor_raw(0, 0);
     digitalWrite(PIN_STBY, LOW);
     pid_reset(pid_left); pid_reset(pid_right);
     stall_fault_l = false; stall_timer_start_l = 0;
@@ -506,17 +524,16 @@ void loop() {
     target_rpm_left_filtered  += constrain(target_rpm_left  - target_rpm_left_filtered,  -max_ramp, max_ramp);
     target_rpm_right_filtered += constrain(target_rpm_right - target_rpm_right_filtered, -max_ramp, max_ramp);
 
-    if (fabs(target_rpm_left_filtered) > 0.01f || fabs(target_rpm_right_filtered) > 0.01f || 
-        fabs(actual_rpm_left) > RPM_STOP_THRESHOLD || fabs(actual_rpm_right) > RPM_STOP_THRESHOLD) {
+    if (fabs(target_rpm_left_filtered) > 0.01f || fabs(target_rpm_right_filtered) > 0.01f) {
       
       float pwm_left = 0, pwm_right = 0;
-      if (!stall_fault_l) {
+      if (!stall_fault_l && fabs(target_rpm_left_filtered) > 0.01f) {
         pwm_left = pid_compute(pid_left, target_rpm_left_filtered, actual_rpm_left, dt);
-        pwm_left = apply_deadzone_ff(pwm_left);
+        pwm_left = apply_deadzone_ff(pwm_left, target_rpm_left_filtered);
       }
-      if (!stall_fault_r) {
+      if (!stall_fault_r && fabs(target_rpm_right_filtered) > 0.01f) {
         pwm_right = pid_compute(pid_right, target_rpm_right_filtered, actual_rpm_right, dt);
-        pwm_right = apply_deadzone_ff(pwm_right);
+        pwm_right = apply_deadzone_ff(pwm_right, target_rpm_right_filtered);
       }
 
       if (fabs(target_rpm_left_filtered) > STALL_DETECT_CMD_THRESH
@@ -640,11 +657,16 @@ void loop() {
     imu_msg.orientation_covariance[8] = 100.0;          // [重要] yaw 方差=100, 表示偏航角完全不可信. 因为 cf_yaw 是纯陀螺仪积分没有磁力计修正, EKF 不应使用此值做偏航参考
   }
 
-  if (loop_count % 3 == 0) {   // 33Hz (100Hz loop): 降频以适配 230400 波特率吞吐
+  // 115200 的有效上限约 11.5KB/s。odom(约 718B) 8Hz + imu(约 320B) 4Hz
+  // 合计约 7.3KB/s；保留约 37% 余量，并错峰发送大帧。
+  unsigned long publish_now_ms = millis();
+  if (publish_now_ms - last_odom_publish_ms >= ODOM_PUBLISH_INTERVAL_MS) {
+    last_odom_publish_ms += ODOM_PUBLISH_INTERVAL_MS;
     pub_odom.publish(&odom_msg);
+  } else if (publish_now_ms - last_imu_publish_ms >= IMU_PUBLISH_INTERVAL_MS) {
+    last_imu_publish_ms += IMU_PUBLISH_INTERVAL_MS;
     if (imu_data_valid) pub_imu.publish(&imu_msg);
   }
-  loop_count++;
 
   nh.spinOnce();
 }
