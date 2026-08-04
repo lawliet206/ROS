@@ -2,6 +2,7 @@
 # 安装: sudo apt install ros-noetic-robot-localization
 
 frequency: 30
+sensor_timeout: 0.35
 
 silent_tf_failure: false
 two_d_mode: true
