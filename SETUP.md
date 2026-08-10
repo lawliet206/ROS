@@ -54,6 +54,8 @@ PC (ROS Master) ←WiFi→ J1900 (车载) ←USB→ ESP32
 
 ### 2.1 PC（一次性）
 
+**执行位置：PC**
+
 ```bash
 # 1. 配置 ROS apt 仓库
 sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
@@ -90,6 +92,8 @@ test -f ~/ROS/yolov8n.pt
 
 ### 2.2 J1900（一次性）
 
+**执行位置：J1900**（安装依赖并停用旧服务）
+
 ```bash
 # 1. 配置 ROS apt 仓库（同上）
 sudo sh -c 'echo "deb http://packages.ros.org/ros/ubuntu $(lsb_release -sc) main" > /etc/apt/sources.list.d/ros-latest.list'
@@ -110,11 +114,18 @@ sudo udevadm control --reload-rules
 # 3. 停用旧的 systemd 串口服务，统一由一键脚本管理
 sudo systemctl disable --now rosserial.service 2>/dev/null || true
 
-# 4. 从 PC 部署 robot_bringup 包（在 PC 执行；--delete 会同步删除旧脚本）
-# rsync -av --delete --exclude='__pycache__/' --exclude='*.pyc' \
-#   ~/ROS/src/robot_bringup/ lawliet@lawliet.local:~/ROS/src/robot_bringup/
+```
 
-# 5. 在 J1900 编译
+**执行位置：PC**（把 `robot_bringup` 部署到 J1900；`--delete` 会同步删除远端旧文件）
+
+```bash
+rsync -av --delete --exclude='__pycache__/' --exclude='*.pyc' \
+  ~/ROS/src/robot_bringup/ lawliet@lawliet.local:~/ROS/src/robot_bringup/
+```
+
+**执行位置：J1900**（部署后编译）
+
+```bash
 cd ~/ROS && source /opt/ros/noetic/setup.bash
 catkin_init_workspace src && catkin_make
 echo "source /opt/ros/noetic/setup.bash" >> ~/.bashrc
@@ -122,6 +133,8 @@ echo "source ~/ROS/devel/setup.bash" >> ~/.bashrc
 ```
 
 ### 2.3 ESP32 固件烧录
+
+**执行位置：PC**（ESP32 用 USB 直接连接 PC；正常使用时不要从 J1900 远程烧录）
 
 Arduino IDE 打开 `esp32_firmware/esp32_firmware.ino`：
 - Board → ESP32 Dev Module，Upload Speed → 115200
@@ -152,6 +165,8 @@ Arduino IDE 打开 `esp32_firmware/esp32_firmware.ino`：
 
 ### 3.1 查看 IP
 
+**执行位置：PC 和 J1900**（两台机器分别执行一次）
+
 ```bash
 # 两台机器都执行
 hostname -I
@@ -161,6 +176,8 @@ export J1900_IP=192.168.1.200
 ```
 
 ### 3.2 SSH 免密登录
+
+**执行位置：PC**
 
 ```bash
 # PC 上执行 (只需一次)
@@ -172,6 +189,8 @@ ssh lawliet@${J1900_IP} "echo ssh ok"
 ```
 
 ### 3.3 设置 ROS 主从
+
+下面两段分别写入对应设备的 `~/.bashrc`，不要互换：
 
 ```bash
 # ========== PC (~/.bashrc 末尾添加) ==========
@@ -188,6 +207,8 @@ source ~/.bashrc
 ```
 
 ### 3.4 验证
+
+**执行位置：PC**
 
 ```bash
 # PC 验证免密 SSH；一键脚本会自行启动 roscore
@@ -262,12 +283,17 @@ JGB37-520 6pin：M1-红, GND-黑, B-黄, A-绿, Vcc-蓝, M2-白
 
 ### 4.6 串口权限
 
+**执行位置：J1900**
+
 ```bash
 echo 'KERNEL=="ttyUSB*", MODE="0666"' | sudo tee /etc/udev/rules.d/99-usb-serial.rules
 sudo udevadm control --reload-rules
 ```
 
 每次开机确认：
+
+**执行位置：J1900**
+
 ```bash
 ls -l /dev/serial/by-id/
 readlink -f /dev/serial/by-id/*
@@ -292,15 +318,21 @@ readlink -f /dev/serial/by-id/*
 1. 万用表确认 TB6612FNG VM = 电池电压（~11-12V）
 2. 电池上电 → ESP32 亮灯
 3. 确认 J1900 的旧串口服务已停用（只需做一次）：
+   **执行位置：PC**（命令通过 SSH 在 J1900 执行 `systemctl`）
+
    ```bash
    ssh -t lawliet@lawliet.local 'sudo systemctl disable --now rosserial.service'
    ```
 4. 在 PC 一键启动 SLAM。脚本会自动启动 roscore、通过 SSH 启动 J1900 的 ESP32 和雷达、
    等待真实消息，再启动 gmapping 和键盘窗口：
+   **执行位置：PC**
+
    ```bash
    bash ~/ROS/src/robot_bringup/scripts/robot_start.sh slam
    ```
 5. PC 验证通信，必须连续观察而不是只确认话题名称存在：
+   **执行位置：PC**
+
    ```bash
    export ROS_IP=10.80.147.11
    export ROS_MASTER_URI=http://10.80.147.11:11311
@@ -313,6 +345,8 @@ readlink -f /dev/serial/by-id/*
    无断流。若 PC 的 `ROS_IP` 误设为 `127.0.0.1`，J1900 无法回连 PC 上的话题节点。
 
 6. 分别点动左右电机。以下每段只运行 2 秒，`timeout` 结束后必须发送零速度：
+   **执行位置：PC**
+
    ```bash
    # 左轮单独正转：v_left=0.40m/s, v_right=0
    timeout --signal=INT 2s rostopic pub -r 20 /cmd_vel geometry_msgs/Twist \
@@ -326,6 +360,8 @@ readlink -f /dev/serial/by-id/*
    ```
 
 7. 停止全部实物功能节点：
+   **执行位置：PC**
+
    ```bash
    bash ~/ROS/src/robot_bringup/scripts/robot_start.sh stop
    ```
@@ -344,15 +380,17 @@ USB CP2102 → ESP32。
 | `/imu` | 约 4Hz |
 | 左轮单独点动 2s | 编码器估算约 0.224m，峰值约 0.243m/s |
 | 右轮单独点动 2s | 编码器估算约 0.188m，峰值约 0.182m/s |
-| 启动死区补偿 | `MIN_START_PWM=350`，用于提高落地原地转向扭矩 |
+| 启动死区补偿 | `MIN_START_PWM=450`，用于提高落地起步和原地转向扭矩 |
 | 停车 | 零命令立即清 PWM 并拉低 STBY；微小编码器残速不重新驱动电机 |
 
-`350 PWM` 是当前实车落地标定值，会同时提高直行和转向的最低驱动力。若更换电机、轮胎、
+`450 PWM` 是当前实车落地标定值，会同时提高直行和转向的最低驱动力。若更换电机、轮胎、
 电池或车重，需要重新标定，不能直接沿用。
 
 ---
 
 ## 6. 仿真操作（PC 单机）
+
+本章所有命令的**执行位置均为 PC**，J1900 和实车硬件不参与仿真。
 
 > **⚠️ 每个新终端必须先执行：`source ~/ROS/devel/setup.bash`**
 > 否则 `rosrun`/`roslaunch` 会报 `package not found`。
@@ -396,6 +434,10 @@ bash ~/ROS/src/robot_sim/scripts/sim_follow.sh
 所有正式功能都从 **PC** 执行。`robot_start.sh` 会自动启动 roscore、通过免密 SSH 切换
 J1900 硬件模式、等待真实话题、停止上一个互斥功能，然后启动 PC 节点。
 
+> **位置规则：** 本章所有 `robot_start.sh`、`save_map.sh`、`rostopic`、RViz 和配置编辑
+> 命令均在 **PC** 终端执行。J1900 只连接 ESP32、雷达和摄像头，由 PC 脚本通过 SSH
+> 自动管理；除底层排障外，不需要在 J1900 手动启动节点。
+
 截至 2026-08-04，一键启动实机验证状态如下：
 
 | 功能 | 命令 | 实测状态 |
@@ -410,20 +452,28 @@ J1900 硬件模式、等待真实话题、停止上一个互斥功能，然后�
 
 任何时候需要停车并关闭功能节点：
 
+**执行位置：PC**
+
 ```bash
 bash ~/ROS/src/robot_bringup/scripts/robot_start.sh stop
 ```
 
 ### 7.1 SLAM 建图
 
+**执行位置：PC**
+
 ```bash
 bash ~/ROS/src/robot_bringup/scripts/robot_start.sh slam
 ```
 
-启动成功后会自动打开键盘窗口。`i` 前进，`j/l` 原地转向，`k` 或空格停车。脚本只有在
-`/odom`、`/imu`、`/scan` 和 `/map` 都有真实数据后才报告成功。
+启动成功后会在 PC 自动打开 RViz 实时显示地图、激光和机器人位置，同时打开键盘窗口。
+`i` 前进，`j/l` 原地转向，`k` 或空格停车。脚本只有在 `/odom`、`/imu`、`/scan` 和
+`/map` 都有真实数据后才报告成功。
 
 保存地图：
+
+**执行位置：PC**（地图保存到 PC 的 `~/maps/`）
+
 ```bash
 bash ~/ROS/src/robot_bringup/scripts/save_map.sh lab_map
 ```
@@ -432,6 +482,8 @@ bash ~/ROS/src/robot_bringup/scripts/save_map.sh lab_map
 
 前提：已保存地图，并确认机器人初始位置与地图坐标一致。首次使用必须编辑实机巡航点；
 仓库模板故意保持为空，避免未经确认的坐标让实车自动运动：
+
+**执行位置：PC**
 
 ```bash
 nano ~/ROS/src/robot_bringup/config/patrol_goals.yaml
@@ -447,11 +499,15 @@ goals:
 
 确认各点位于地图可通行区域后，一键循环巡航：
 
+**执行位置：PC**
+
 ```bash
 bash ~/ROS/src/robot_bringup/scripts/robot_start.sh patrol
 ```
 
 指定其他地图和巡航点文件：
+
+**执行位置：PC**
 
 ```bash
 bash ~/ROS/src/robot_bringup/scripts/robot_start.sh patrol \
@@ -463,18 +519,31 @@ bash ~/ROS/src/robot_bringup/scripts/robot_start.sh patrol \
 一键启动 J1900 的 ESP32、雷达和摄像头压缩流，以及 PC 的 YOLOv8n 人体检测与
 视觉+雷达融合控制：
 
+**执行位置：PC**
+
 ```bash
 bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow
 ```
 
+当前摄像头为倒置安装，检测节点默认在 PC 上将画面旋转 `180°` 后再执行 YOLO、计算人体
+偏角并发布叠加画面。以后改为正装时使用：
+
+```bash
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow rotate_180:=false
+```
+
 视觉确定人体方向，雷达聚类确定距离；雷达数据过期时只允许转向，不会使用旧距离前冲。
 默认跟随距离为 `1.0m`，可覆盖参数：
+
+**执行位置：PC**
 
 ```bash
 bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow follow_dist:=1.2 hfov:=70
 ```
 
 调试检测结果：
+
+**执行位置：PC**
 
 ```bash
 rostopic echo /person_visible
@@ -491,6 +560,9 @@ EKF 融合 ESP32 的 `/odom`（编码器）和 `/imu`（MPU6050），输出 `/od
 > ⚠️ **勿同时启动多个含 EKF 的 launch**——同名节点 `ekf_localization` 后注册者会抢占踢掉先注册者，期间 TF 短暂中断，AMCL 可能失锁。
 
 如需单独调试：
+
+**执行位置：PC**
+
 ```bash
 roslaunch robot_bringup ekf.launch
 rostopic echo /odometry/filtered -n1
@@ -505,11 +577,11 @@ rostopic echo /odometry/filtered -n1
 
 ### 仿真
 
-| 命令 | 功能 |
-|------|------|
-| `bash ~/ROS/src/robot_sim/scripts/sim_slam.sh` | SLAM 建图 |
-| `bash ~/ROS/src/robot_sim/scripts/sim_navigation.sh ~/maps/sim_map.yaml` | 导航 |
-| `bash ~/ROS/src/robot_sim/scripts/sim_follow.sh` | 激光跟随 |
+| 在哪 | 命令 | 功能 |
+|------|------|------|
+| PC | `bash ~/ROS/src/robot_sim/scripts/sim_slam.sh` | SLAM 建图 |
+| PC | `bash ~/ROS/src/robot_sim/scripts/sim_navigation.sh ~/maps/sim_map.yaml` | 导航 |
+| PC | `bash ~/ROS/src/robot_sim/scripts/sim_follow.sh` | 激光跟随 |
 
 ### 实物
 
@@ -522,7 +594,9 @@ rostopic echo /odometry/filtered -n1
 | PC | `bash ~/ROS/src/robot_bringup/scripts/robot_start.sh status` | 查看 PC/J1900 状态 |
 | PC | `bash ~/ROS/src/robot_bringup/scripts/robot_start.sh stop` | 发零速度并停止全部实物功能节点 |
 
-仅在排查 J1900 时直接使用底层脚本：
+仅在排查 J1900 时直接使用底层脚本。
+
+**执行位置：J1900**（先执行 `ssh lawliet@lawliet.local` 登录 J1900）：
 
 ```bash
 bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh base
@@ -558,7 +632,7 @@ bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh stop
 | PC 能看到话题但 J1900 数据回不来 | PC 的 `ROS_IP` 不能是 `127.0.0.1`，应设置为 Wi-Fi 地址（当前为 `10.80.147.11`） |
 | 巡航入口提示至少需要 2 个点 | 编辑 `config/patrol_goals.yaml`，只填写实机地图中已确认可通行的坐标 |
 | 巡航启动后定位不准 | 机器人起点必须与地图初始位姿一致；否则先用 RViz 的 `2D Pose Estimate` 校正，再启动巡航 |
-| 左右轮架空启动速度差异明显 | 先检查供电/接线；当前 `MIN_START_PWM=350` 是落地标定值，更换负载后需重标 |
+| 左右轮架空启动速度差异明显 | 先检查供电/接线；当前 `MIN_START_PWM=450` 是落地标定值，更换负载后需重标 |
 | rosrun/roslaunch 报 package not found | `source ~/ROS/devel/setup.bash`（每个新终端都要执行一次） |
 | Gazebo 打不开 | `export SVGA_VGPU10=0` |
 | 一键启动后超时 | 查看 `~/.robot_logs/`；J1900 硬件日志位于 `/tmp/esp32.log`、`/tmp/lidar.log`、`/tmp/cam.log` |
