@@ -124,7 +124,7 @@ stop_pc_modes() {
     for node in \
       /teleop_twist_keyboard /slam_gmapping /scan_deskew /scan_deskew_relay \
       /ekf_localization /robot_state_publisher /map_server /amcl /move_base \
-      /nav_cmd_vel_relay /send_goals /person_detector /follower; do
+      /nav_cmd_vel_relay /send_goals /person_detector /follower /rviz; do
       if printf '%s\n' "${active_nodes}" | grep -qx "${node}"; then
         rosnode kill "${node}" >/dev/null 2>&1 || true
       fi
@@ -134,6 +134,7 @@ stop_pc_modes() {
   stop_local_pattern "roslaunch robot_bringup slam.launch"
   stop_local_pattern "roslaunch robot_bringup navigation.launch"
   stop_local_pattern "roslaunch robot_bringup follow_vision.launch"
+  stop_local_pattern "rviz -d ${ROS_WS}/src/robot_bringup/config/slam.rviz"
   stop_local_pattern "/teleop_twist_keyboard/teleop_twist_keyboard.py"
   stop_local_pattern "/robot_bringup/send_goals.py"
   sleep 1
@@ -206,7 +207,7 @@ PY
 }
 
 run_slam() {
-  require_ros_packages gmapping robot_localization topic_tools teleop_twist_keyboard || return 1
+  require_ros_packages gmapping robot_localization topic_tools teleop_twist_keyboard rviz || return 1
   prepare_hardware base || return 1
 
   local log_file="${LOG_DIR}/slam.log"
@@ -218,10 +219,18 @@ run_slam() {
     return 1
   fi
 
+  if [ -n "${DISPLAY:-}" ]; then
+    start_detached "${LOG_DIR}/rviz.log" \
+      rviz -d "${ROS_WS}/src/robot_bringup/config/slam.rviz" __name:=rviz
+    echo "[OK] RViz 实时建图窗口已启动"
+  else
+    echo "[WARN] 当前没有图形桌面，无法自动打开 RViz"
+  fi
+
   if command -v gnome-terminal >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
     gnome-terminal --title="SLAM keyboard control" -- bash -lc \
       "source /opt/ros/noetic/setup.bash; source '${ROS_WS}/devel/setup.bash'; export ROS_MASTER_URI='${ROS_MASTER_URI}'; export ROS_IP='${ROS_IP}'; rosrun teleop_twist_keyboard teleop_twist_keyboard.py _speed:=0.30 _turn:=0.80 _repeat_rate:=20.0 _key_timeout:=1.0"
-    echo "[OK] SLAM 与键盘窗口已启动"
+    echo "[OK] SLAM 键盘窗口已启动"
   else
     echo "[WARN] 当前没有图形终端，SLAM 已启动；请另开终端运行键盘控制"
     echo "       rosrun teleop_twist_keyboard teleop_twist_keyboard.py"
