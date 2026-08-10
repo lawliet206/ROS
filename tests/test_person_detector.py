@@ -2,9 +2,11 @@ import math
 import sys
 import os
 
+import numpy as np
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "robot_bringup", "scripts"))
 
-from person_detector import angle_from_center, select_center_box
+from person_detector import angle_from_center, orient_frame, select_center_box
 
 
 def test_angle_center_zero():
@@ -49,3 +51,13 @@ def test_select_center_box_tie_break():
     sel = select_center_box(boxes, 640)
     assert sel is not None
     assert sel[0] == 320.0
+
+
+def test_orient_frame_rotates_180():
+    frame = np.array([[1, 2, 3], [4, 5, 6]], dtype=np.uint8)
+    assert orient_frame(frame, True).tolist() == [[6, 5, 4], [3, 2, 1]]
+
+
+def test_orient_frame_can_be_disabled():
+    frame = np.array([[1, 2], [3, 4]], dtype=np.uint8)
+    assert orient_frame(frame, False) is frame

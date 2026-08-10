@@ -53,12 +53,20 @@ def select_center_box(boxes, image_width):
     return (cx, best[0], best[1], best[2], best[3])
 
 
+def orient_frame(frame, rotate_180):
+    """Rotate an upside-down camera image before detection."""
+    if rotate_180:
+        return cv2.rotate(frame, cv2.ROTATE_180)
+    return frame
+
+
 class PersonDetector:
     def __init__(self):
         self.conf = rospy.get_param("~conf", 0.4)
         self.hfov = rospy.get_param("~hfov", 60.0)
         self.image_topic = rospy.get_param("~image_topic", "/image_raw/compressed")
         self.publish_overlay = rospy.get_param("~publish_overlay", True)
+        self.rotate_180 = rospy.get_param("~rotate_180", True)
         # 显式 CPU 推理: 本机 CUDA 版 PyTorch 在无可用 GPU 时推理会直接崩溃
         self.device = rospy.get_param("~device", "cpu")
 
@@ -86,6 +94,7 @@ class PersonDetector:
             return
         if frame is None:
             return
+        frame = orient_frame(frame, self.rotate_180)
         h, w = frame.shape[:2]
 
         results = self.model(frame, conf=self.conf, classes=[0], verbose=False, device=self.device)

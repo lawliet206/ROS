@@ -12,12 +12,14 @@
   <arg name="follow_dist" default="1.0" />
   <arg name="max_speed"   default="0.5" />
   <arg name="hfov"        default="60.0" />
+  <arg name="rotate_180"  default="true" />
 
   <!-- 人体检测节点 (YOLOv8n) -->
   <node name="person_detector" pkg="robot_bringup" type="person_detector.py"
         output="screen">
     <param name="hfov" value="$(arg hfov)" />
     <param name="conf" value="0.4" />
+    <param name="rotate_180" value="$(arg rotate_180)" />
   </node>
 
   <!-- 融合控制器 -->
