@@ -1,5 +1,4 @@
-# Replace these examples with free-space coordinates from your real map.
-# Keep at least two goals. Format: [x(m), y(m), yaw(rad)].
-goals: []
-#  - [0.0, 0.0, 0.0]
-#  - [1.0, 0.0, 0.0]
+# Real-map patrol points selected in RViz. Format: [x(m), y(m), yaw(rad)].
+goals:
+  - [1.590365, -3.244545, 0.0]
+  - [1.564000, -3.492396, 0.0]
