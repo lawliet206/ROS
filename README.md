@@ -1,31 +1,3 @@
-可以。结合你刚才给我的**实体机器人照片、6.5 秒实物运行视频**，以及我前面看过的仓库实际结构，我建议你直接把 README 改成下面这个版本。
-
-这版我特意做了几个调整：
-
-* 第一屏直接说明项目是什么
-* 把**实体机器人**放到最前面
-* 用你的照片展示真实硬件
-* 视频采用“图片缩略图 → 点击播放/打开 MP4”的方式，兼容 GitHub
-* 把仿真、SLAM、导航、人体跟随作为核心功能
-* MCP / Agent 保留，但不再喧宾夺主
-* 增加 Project Status / Architecture / Security / Roadmap
-* 不虚构 Stars、用户、下载量、贡献者
-* 不写目前还没有实现的功能
-* 给未来 Codex for Open Source 申请留出明显的安全场景
-
-**你只需要先在仓库里建立 `assets` 文件夹：**
-
-```text
-assets/
-├── robot.jpg
-├── mapping.jpg
-└── demo.mp4
-```
-
-把你刚才给我的**小车照片**命名为 `robot.jpg`，你刚才发的 **RViz 建图照片**命名为 `mapping.jpg`，视频命名为 `demo.mp4`。
-
-然后把下面整段直接替换 README.md。
-
 # ROS Differential-Drive Robot 🤖
 
 A complete ROS Noetic differential-drive mobile robot project covering **simulation, embedded control, LiDAR, odometry, sensor fusion, SLAM, navigation, and human following**.
@@ -626,17 +598,3 @@ If you find the project useful, consider giving it a ⭐ on GitHub.
 
 **Repository:**
 [https://github.com/lawliet206/ROS](https://github.com/lawliet206/ROS)
-
-### 我建议你特别注意一个地方
-
-你这张 **RViz 建图照片其实很适合放 README 第一屏附近**。它能直接证明“不是纯代码项目，而是已经跑到实体机器人上了”。
-
-而你刚才给我的视频只有大约 **6.5 秒、1920×1080**，里面能看到实体小车在实际场地运行。这个视频非常适合放在 `Demo` 部分。**不要把视频内容夸大成“autonomous navigation demo”**，除非视频里确实能清楚看到自主导航；README 里目前写成 *physical robot demo* 是最稳妥的。
-
-另外，这版我特意**没有把你原 README 那一大堆 Skills 全塞进去**。如果你准备冲 Codex for Open Source，我建议把那些内容单独整理成：
-
-```text
-docs/AI_DEVELOPMENT.md
-```
-
-这样主页看起来会像一个**真正的机器人开源项目**，而不是一个 AI 工具配置仓库，同时又保留你申请 Codex Security 最关键的 **Agent → MCP → Shell → ROS → Robot** 攻击面。
