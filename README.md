@@ -10,6 +10,8 @@ Gazebo simulation -> ROS validation -> physical robot bringup -> real-world tuni
 
 > Project status: actively developed. The physical platform is running, while real-world navigation, patrol, and human-following behavior still require environment-specific tuning.
 
+[License](LICENSE) | [Contributing](CONTRIBUTING.md) | [Maintainer workflow](docs/MAINTAINER_WORKFLOW.md)
+
 <p align="center">
   <img src="assets/robot.jpg" width="780" alt="Self-built differential-drive robot">
 </p>
@@ -49,7 +51,7 @@ The physical robot publishes LiDAR and odometry data to ROS. The resulting 2D oc
 - EKF fusion of wheel odometry and MPU6050 IMU data through `robot_localization`.
 - AMCL localization, `move_base`, TEB local planning, and multi-goal patrol workflows.
 - LiDAR-only and vision-plus-LiDAR human-following nodes.
-- Python tests for the perception and LiDAR-related nodes.
+- Python tests for perception, LiDAR parsing, and following logic, runnable in CI without a ROS installation.
 - Startup and stop scripts for coordinating the ROS PC, J1900 onboard computer, ESP32, LiDAR, and camera.
 
 ## System architecture
@@ -165,6 +167,22 @@ source devel/setup.bash
 ```
 
 Install the complete dependency list and configure the PC/J1900 network by following [SETUP.md](SETUP.md). Every new shell that runs ROS commands must source both the ROS installation and this workspace.
+
+## Development checks
+
+The pure Python unit tests are intentionally runnable without a ROS installation. This keeps parser and controller regression checks accessible to contributors and continuous integration:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest tests -q
+```
+
+For any ROS package change, also build the workspace:
+
+```bash
+source /opt/ros/noetic/setup.bash
+catkin_make
+```
 
 ## Simulation
 
@@ -287,9 +305,9 @@ Do not start multiple copies of the EKF node at the same time. Duplicate publish
 
 ## AI-assisted development and security
 
-The repository contains instruction files for local coding-agent workflows, including [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), and [CURSOR.md](CURSOR.md). These files are development aids, not a replacement for reviewing commands before they are run.
+The repository contains instruction files for local coding-agent workflows, including [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), and [CURSOR.md](CURSOR.md). These files are development aids, not a replacement for reviewing commands before they are run. The [maintainer workflow](docs/MAINTAINER_WORKFLOW.md) defines the appropriate use of Codex for this mixed ROS and embedded codebase.
 
-Any local agent, MCP integration, shell runner, ROS service caller, or hardware-control tool used with this project should be restricted to a trusted development environment. Review repository instructions, shell commands, dependencies, credentials, and ROS service calls before granting an automated tool access to the workspace or robot.
+Codex is most useful here for tracing multi-component changes, adding regression tests, reviewing launch and shell-script changes, and keeping documentation synchronized. It is not an autonomous robot operator. Any local agent, MCP integration, shell runner, ROS service caller, or hardware-control tool must remain in a trusted development environment and require human review before it can affect hardware.
 
 The physical robot can move and interact with its environment. Test changes with the wheels lifted or at low speed first, keep an operator near the power switch, and never expose robot-control interfaces directly to an untrusted network.
 
@@ -333,7 +351,7 @@ The physical robot can move and interact with its environment. Test changes with
 
 ## Contributing
 
-Issues, fixes, hardware notes, and documentation improvements are welcome. For a useful bug report, include:
+Issues, fixes, hardware notes, and documentation improvements are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) for the validation workflow, pull-request expectations, and hardware safety requirements. For a useful bug report, include:
 
 ```text
 ROS version:
@@ -352,13 +370,14 @@ For changes that can move the robot, include the test environment and the safety
 
 - [SETUP.md](SETUP.md): installation, networking, wiring, first power-on, simulation, and physical operation.
 - Hardware and mechanical notes are documented in the repository-root hardware notes file.
+- [Maintainer workflow](docs/MAINTAINER_WORKFLOW.md): safe, reviewable use of Codex and other coding agents.
 - [Robot bringup launch files](src/robot_bringup/launch/): real-robot SLAM, navigation, EKF, and following.
 - [Simulation launch files](src/robot_sim/launch/): Gazebo, simulated SLAM, and navigation.
 - [Tests](tests/): unit tests for LiDAR and following-related Python nodes.
 
 ## License
 
-The ROS package manifests currently declare MIT. This checkout does not contain a top-level `LICENSE` file, so add one before distributing the repository under a formal license.
+This project is available under the [MIT License](LICENSE).
 
 ## About
 
