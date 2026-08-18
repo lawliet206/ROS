@@ -1,600 +1,367 @@
-# ROS Differential-Drive Robot 🤖
+# ROS Differential-Drive Robot
 
-A complete ROS Noetic differential-drive mobile robot project covering **simulation, embedded control, LiDAR, odometry, sensor fusion, SLAM, navigation, and human following**.
+A ROS Noetic mobile robot project that connects simulation, embedded motor control, LiDAR, odometry, sensor fusion, SLAM, navigation, and human following on a self-built differential-drive platform.
 
-The project is designed to provide a practical path from **Gazebo simulation to a physical robot**, with the ROS navigation stack running on a real differential-drive platform.
-
-> 🚧 This project is actively developed. Some real-world navigation and following functions are still being validated and tuned.
-
-<p align="center">
-  <img src="assets/robot.jpg" width="700">
-</p>
-
-<p align="center">
-  <b>Physical differential-drive robot</b>
-</p>
-
----
-
-## 🎥 Demo
-
-### Physical Robot
-
-The following video shows the physical robot running on a real test field.
-
-[▶️ **Watch the physical robot demo**](assets/demo.mp4)
-
-### SLAM Mapping
-
-The robot uses LiDAR-based SLAM to build a 2D map of the environment.
-
-<p align="center">
-  <img src="assets/mapping.jpg" width="800">
-</p>
-
----
-
-## ✨ Features
-
-* Differential-drive mobile robot
-* ROS Noetic
-* Gazebo simulation
-* ESP32-based motor controller
-* Encoder-based odometry
-* MPU6050 IMU
-* S9 LiDAR
-* LiDAR driver
-* EKF sensor fusion
-* SLAM mapping
-* AMCL localization
-* ROS Navigation Stack
-* TEB local planner
-* Multi-goal navigation
-* LiDAR-based human following
-* URDF robot model
-* Physical robot deployment
-* AI-assisted development workflow
-* Local ROS MCP tools for development and debugging
-
----
-
-## 🧩 System Architecture
+The repository is organized around one practical workflow:
 
 ```text
-                         ┌──────────────────────────┐
-                         │       ROS Noetic PC      │
-                         │                          │
-                         │  RViz / SLAM / AMCL      │
-                         │  Navigation / TEB / EKF  │
-                         └────────────┬─────────────┘
-                                      │
-                                   Network
-                                      │
-                         ┌────────────▼─────────────┐
-                         │          J1900           │
-                         │        ROS Computer      │
-                         │                          │
-                         │     LiDAR / ROS Nodes    │
-                         └───────┬──────────┬────────┘
-                                 │          │
-                                USB        USB
-                                 │          │
-                    ┌────────────▼───┐   ┌──▼────────────┐
-                    │     ESP32      │   │   S9 LiDAR    │
-                    │                │   │               │
-                    │ Motor Control  │   │  Laser Scan   │
-                    │ Encoder PCNT   │   │    Driver     │
-                    │ PID            │   └───────────────┘
-                    │ MPU6050        │
-                    │ rosserial      │
-                    └───────┬────────┘
-                            │
-                       TB6612FNG
-                            │
-                  ┌─────────┴─────────┐
-                  │                   │
-             Left Motor          Right Motor
+Gazebo simulation -> ROS validation -> physical robot bringup -> real-world tuning
 ```
 
----
+> Project status: actively developed. The physical platform is running, while real-world navigation, patrol, and human-following behavior still require environment-specific tuning.
 
-## 🖥️ Software Stack
+<p align="center">
+  <img src="assets/robot.jpg" width="780" alt="Self-built differential-drive robot">
+</p>
 
-| Component           | Technology               |
-| ------------------- | ------------------------ |
-| Operating System    | Ubuntu                   |
-| Robot Middleware    | ROS Noetic               |
-| Simulation          | Gazebo                   |
-| Visualization       | RViz                     |
-| SLAM                | GMapping                 |
-| Localization        | AMCL                     |
-| Global Planning     | Navfn                    |
-| Local Planning      | TEB                      |
-| Sensor Fusion       | robot_localization / EKF |
-| Embedded Controller | ESP32                    |
-| Communication       | rosserial                |
-| LiDAR               | S9                       |
-| Robot Model         | URDF                     |
+<p align="center">
+  <strong>Self-built differential-drive robot running on a real test field</strong>
+</p>
 
----
+## Demo
 
-## 🤖 Hardware
+### Physical robot
 
-The current physical robot uses the following main components:
+The video is a short real-world run of the physical robot. It demonstrates the assembled platform moving on a test field; it is intentionally described as a physical robot demo rather than a claim of fully autonomous navigation.
 
-| Component       | Hardware           |
-| --------------- | ------------------ |
-| Main Computer   | J1900              |
-| Microcontroller | ESP32-WROOM-32     |
-| Motor Driver    | TB6612FNG          |
-| Motors          | JGB37-520          |
-| LiDAR           | S9                 |
-| IMU             | MPU6050            |
-| Drive Type      | Differential Drive |
-| Wheel Diameter  | 85 mm              |
-| Battery         | 3S LiPo            |
+<p align="center">
+  <a href="assets/demo.mp4"><img src="assets/robot.jpg" width="780" alt="Open the physical robot demo video"></a>
+</p>
 
-The hardware configuration and GPIO assignments are documented in the repository.
+<p align="center">
+  <a href="assets/demo.mp4">Open the physical robot demo (MP4)</a>
+</p>
 
----
+### LiDAR SLAM mapping
 
-## 📁 Repository Structure
+The physical robot publishes LiDAR and odometry data to ROS. The resulting 2D occupancy grid can be inspected in RViz and saved for later localization and navigation.
+
+<p align="center">
+  <img src="assets/mapping.jpg" width="900" alt="RViz LiDAR SLAM map">
+</p>
+
+## Highlights
+
+- ROS Noetic packages for both simulation and physical bringup.
+- Gazebo differential-drive simulation with LiDAR, SLAM, navigation, and following experiments.
+- ESP32 low-level control for motor PWM, encoder feedback, PID, IMU acquisition, and rosserial communication.
+- S9 LiDAR driver and scan processing for mapping, obstacle information, and following.
+- EKF fusion of wheel odometry and MPU6050 IMU data through `robot_localization`.
+- AMCL localization, `move_base`, TEB local planning, and multi-goal patrol workflows.
+- LiDAR-only and vision-plus-LiDAR human-following nodes.
+- Python tests for the perception and LiDAR-related nodes.
+- Startup and stop scripts for coordinating the ROS PC, J1900 onboard computer, ESP32, LiDAR, and camera.
+
+## System architecture
+
+The default physical setup uses a ROS PC as the master and a J1900 as the onboard computer. The two computers communicate over Wi-Fi. The J1900 connects to the ESP32 and LiDAR over USB, while the ESP32 drives the motors and reads the encoders and IMU.
+
+```text
+                          ROS PC
+            RViz / SLAM / AMCL / move_base / TEB
+                              |
+                         Wi-Fi network
+                              |
+                         J1900 onboard PC
+                    rosserial / LiDAR / camera
+                         |              |
+                        USB            USB
+                         |              |
+                       ESP32          S9 LiDAR
+                 PWM / encoders       LaserScan
+                 PID / MPU6050            |
+                         |                |
+                    TB6612FNG <-----------+
+                      |     |
+                Left motor  Right motor
+```
+
+The main data paths are:
+
+```text
+S9 LiDAR -> LaserScan -> scan processing -> gmapping -> /map
+Encoders -> /odom
+MPU6050 -> /imu
+/odom + /imu -> robot_localization EKF -> /odometry/filtered
+/map + odometry + LaserScan -> AMCL / move_base -> /cmd_vel
+/cmd_vel -> rosserial -> ESP32 -> motor PID -> motors
+```
+
+## Software stack
+
+| Component | Technology |
+| --- | --- |
+| Operating system | Ubuntu 20.04 |
+| Middleware | ROS Noetic |
+| Simulation | Gazebo |
+| Visualization | RViz |
+| SLAM | `gmapping` |
+| Localization | `amcl` |
+| Navigation | `move_base` |
+| Local planner | TEB local planner |
+| Sensor fusion | `robot_localization` EKF |
+| Embedded communication | `rosserial` |
+| Robot model | URDF |
+| Main languages | Python, Bash, C++, Arduino |
+
+## Hardware
+
+The current documented hardware configuration is:
+
+| Component | Hardware |
+| --- | --- |
+| ROS onboard computer | J1900 x86_64 computer |
+| Microcontroller | ESP32-WROOM-32 |
+| Motor driver | TB6612FNG dual H-bridge |
+| Motors | JGB37-520 geared motors with encoders |
+| LiDAR | S9-FSRD-V1.0 |
+| IMU | MPU6050 |
+| Drive type | Differential drive |
+| Wheel diameter | 85 mm |
+| Battery | 3S LiPo |
+
+See [SETUP.md](SETUP.md) for the two-computer network, USB serial, GPIO, power, calibration, and first-power-on procedures.
+
+## Repository structure
 
 ```text
 ROS/
-├── robot_bringup/
-│   ├── launch/
-│   ├── config/
-│   ├── urdf/
-│   ├── scripts/
-│   └── ...
-│
-├── robot_sim/
-│   ├── launch/
-│   ├── worlds/
-│   ├── urdf/
-│   └── ...
-│
-├── esp32_firmware/
-│   └── ...
-│
-├── S9/
-│   └── ...
-│
-├── tools/
-│   └── ...
-│
-├── assets/
-│   ├── robot.jpg
-│   ├── mapping.jpg
-│   └── demo.mp4
-│
-└── README.md
+|-- src/
+|   |-- robot_bringup/
+|   |   |-- config/
+|   |   |-- launch/
+|   |   |-- scripts/
+|   |   `-- urdf/
+|   `-- robot_sim/
+|       |-- config/
+|       |-- launch/
+|       |-- rviz/
+|       |-- scripts/
+|       |-- urdf/
+|       `-- worlds/
+|-- esp32_firmware/
+|-- tests/
+|-- tools/
+|-- docs/
+|-- assets/
+|   |-- robot.jpg
+|   |-- mapping.jpg
+|   `-- demo.mp4
+|-- SETUP.md
+`-- README.md
 ```
 
----
+## Quick start
 
-# 🚀 Quick Start
-
-## 1. Clone the repository
+The commands below assume Ubuntu 20.04 with ROS Noetic installed.
 
 ```bash
 git clone https://github.com/lawliet206/ROS.git
 cd ROS
-```
 
-## 2. Source ROS Noetic
-
-```bash
 source /opt/ros/noetic/setup.bash
-```
-
-## 3. Build the workspace
-
-```bash
 catkin_make
-```
-
-Then source the workspace:
-
-```bash
 source devel/setup.bash
 ```
 
-> The exact launch file depends on whether you are running the simulation or the physical robot.
+Install the complete dependency list and configure the PC/J1900 network by following [SETUP.md](SETUP.md). Every new shell that runs ROS commands must source both the ROS installation and this workspace.
 
----
+## Simulation
 
-# 🧪 Simulation
+Simulation commands are intended to run on the ROS PC without the physical robot or J1900.
 
-The repository includes a Gazebo simulation environment for developing and testing the robot without physical hardware.
+### Gazebo SLAM
 
-The simulation environment is intended to support:
-
-* Differential-drive control
-* LiDAR simulation
-* SLAM
-* Navigation
-* Localization
-* Human-following experiments
-
-Typical workflow:
-
-```text
-Gazebo
-  ↓
-Robot Model
-  ↓
-LiDAR / Odometry
-  ↓
-SLAM
-  ↓
-Map
-  ↓
-AMCL
-  ↓
-Navigation
-  ↓
-TEB
+```bash
+bash src/robot_sim/scripts/sim_slam.sh
 ```
 
----
+Drive the robot with `teleop_twist_keyboard` in another terminal, then save a map:
 
-# 🗺️ SLAM
-
-The robot uses a 2D LiDAR-based SLAM workflow to build an occupancy grid map.
-
-The physical robot publishes LiDAR and odometry information to ROS, which can then be used by the SLAM system.
-
-Main data flow:
-
-```text
-S9 LiDAR
-   ↓
-LaserScan
-   ↓
-SLAM
-   +
-Odometry
-   ↓
-Occupancy Grid Map
+```bash
+rosrun teleop_twist_keyboard teleop_twist_keyboard.py
+rosrun map_server map_saver -f ~/maps/sim_map
 ```
 
-The resulting map can be visualized in RViz and saved for later navigation.
+### Simulated navigation
 
----
-
-# 🧭 Navigation
-
-The navigation stack combines:
-
-* Global planning
-* Local planning
-* AMCL localization
-* Costmaps
-* TF
-* Odometry
-* LiDAR obstacle information
-* TEB local planner
-
-The intended navigation pipeline is:
-
-```text
-Map
- ↓
-AMCL
- ↓
-Move Base
- ├── Global Planner
- └── TEB Local Planner
-       ↓
-    cmd_vel
-       ↓
-     ESP32
-       ↓
-     Motors
+```bash
+bash src/robot_sim/scripts/sim_navigation.sh ~/maps/sim_map.yaml
 ```
 
----
+The simulated navigation launch includes AMCL, `move_base`, costmaps, and the TEB local planner.
 
-# 👤 Human Following
+### Simulated LiDAR following
 
-The repository also contains a LiDAR-based human-following workflow.
-
-The basic concept is:
-
-```text
-LiDAR
- ↓
-Laser Scan Processing
- ↓
-Human Detection
- ↓
-Target Position
- ↓
-Velocity Command
- ↓
-Robot
+```bash
+bash src/robot_sim/scripts/sim_follow.sh
 ```
 
-This function is currently considered experimental and requires further real-world tuning.
+## Physical robot
 
----
+The physical startup script runs on the ROS PC. It starts and stops the PC-side ROS nodes and uses SSH to coordinate the J1900 hardware services.
 
-# 🔧 ESP32 Firmware
+Before using the script:
 
-The ESP32 acts as the low-level controller of the robot.
+1. Configure ROS networking between the PC and J1900.
+2. Confirm passwordless SSH from the PC to the J1900.
+3. Deploy `src/robot_bringup` to the J1900 as described in [SETUP.md](SETUP.md).
+4. Confirm the robot is lifted or otherwise mechanically safe for the first motor test.
 
-Its main responsibilities include:
+Check the current state:
 
-* Motor PWM control
-* Encoder acquisition
-* Wheel speed measurement
-* PID control
-* MPU6050 communication
-* Odometry-related data
-* ROS communication through rosserial
-
-The architecture separates high-level robotics algorithms from low-level motor control:
-
-```text
-ROS
- │
- │ cmd_vel
- ▼
-ESP32
- │
- ├── PID
- ├── PWM
- ├── Encoder
- └── Motor Driver
+```bash
+bash src/robot_bringup/scripts/robot_start.sh status
 ```
 
-This allows the ROS computer to focus on localization, mapping, planning, and perception while the ESP32 handles real-time motor control.
+### Real-robot SLAM
 
----
-
-# 📡 Sensor Fusion
-
-The robot combines wheel odometry and IMU information through an EKF-based sensor-fusion workflow.
-
-```text
-Wheel Encoder
-      │
-      ▼
-  Odometry ─────┐
-                │
-                ▼
-              EKF
-                ▲
-                │
-             MPU6050
-                │
-                ▼
-          Filtered State
+```bash
+bash src/robot_bringup/scripts/robot_start.sh slam
 ```
 
-This is used to improve the stability of the robot's estimated motion state.
+The script starts the ESP32 and LiDAR side, waits for real ROS topics, launches `gmapping`, and opens RViz when a graphical session is available. Save a map with:
 
----
-
-# 🧠 AI-Assisted Development
-
-This project also experiments with **AI-assisted robotics development**.
-
-AI coding agents are used as development assistants for:
-
-* ROS code analysis
-* Debugging
-* Configuration analysis
-* Build troubleshooting
-* Documentation
-* Repository navigation
-* ROS development workflows
-
-The repository includes a local ROS MCP development tool that allows an AI agent to interact with the ROS development environment.
-
----
-
-# 🔌 ROS MCP
-
-The project contains a local MCP server for AI-assisted ROS development.
-
-The current tooling includes operations for tasks such as:
-
-* Building the ROS workspace
-* Launching ROS nodes
-* Listing ROS nodes
-* Listing ROS topics
-* Inspecting topic messages
-* Calling ROS services
-* Inspecting launch files
-
-Conceptually:
-
-```text
-             AI Agent
-                 │
-                 ▼
-              MCP Tool
-                 │
-        ┌────────┴────────┐
-        │                 │
-      Build             ROS
-        │             Operations
-        ▼                 │
-   catkin_make        Nodes / Topics
-                          │
-                          ▼
-                       Robot
+```bash
+bash src/robot_bringup/scripts/save_map.sh lab_map
 ```
 
-These tools are intended for trusted development environments.
+### Multi-goal patrol
 
-Because some MCP operations can interact with the local ROS environment or execute development commands, they should **not be exposed to untrusted agents or untrusted network clients**.
+Edit the patrol points for the map you saved. The checked-in file is a template and should not be treated as safe physical coordinates without validation.
 
----
+```bash
+nano src/robot_bringup/config/patrol_goals.yaml
+bash src/robot_bringup/scripts/robot_start.sh patrol \
+  ~/maps/lab_map.yaml \
+  src/robot_bringup/config/patrol_goals.yaml
+```
 
-# 🔐 Security Considerations
+### Human following
 
-Because this repository combines robotics software with AI-assisted development tools, security is considered at several boundaries.
+The physical following workflow combines the camera detector with LiDAR-based range and direction information. It requires the YOLOv8n weights on the ROS workspace and is considered experimental outside the tested environment.
 
-Potential areas include:
+```bash
+bash src/robot_bringup/scripts/robot_start.sh follow
+```
 
-* Repository-level prompt injection
-* Malicious AI-agent instructions
-* Unsafe shell command execution
-* Unsafe subprocess usage
-* MCP trust boundaries
-* Third-party MCP dependencies
-* Credential and environment-variable exposure
-* Malicious or compromised dependencies
-* Unsafe ROS service invocation
-* Untrusted repository contributions
+The lower-level LiDAR-only follower is also available through `follow.launch` for isolated testing.
 
-In particular, files such as agent instructions and development configuration may influence the behavior of AI coding agents.
+### Stop safely
 
-The project therefore treats AI-agent instructions, MCP tools, shell commands, and ROS execution interfaces as separate trust boundaries.
+Always stop the active physical mode through the project script. It publishes a zero velocity before stopping the PC and J1900 nodes.
 
-> AI-assisted development tools should only be used in trusted development environments and should be reviewed by a human before executing potentially destructive or hardware-affecting operations.
+```bash
+bash src/robot_bringup/scripts/robot_start.sh stop
+```
 
----
+## ESP32 firmware
 
-# 📊 Project Status
+Open [esp32_firmware/esp32_firmware.ino](esp32_firmware/esp32_firmware.ino) in Arduino IDE and flash an ESP32 Dev Module. The firmware handles:
 
-| Component                 | Status                  |
-| ------------------------- | ----------------------- |
-| Differential-drive robot  | ✅ Working               |
-| ESP32 motor control       | ✅ Working               |
-| Encoder feedback          | ✅ Implemented           |
-| MPU6050                   | ✅ Implemented           |
-| S9 LiDAR                  | ✅ Implemented           |
-| Gazebo simulation         | ✅ Available             |
-| SLAM                      | ✅ Implemented / Testing |
-| AMCL                      | ✅ Implemented           |
-| Navigation                | ⚠️ Active tuning        |
-| TEB                       | ⚠️ Active tuning        |
-| EKF sensor fusion         | ⚠️ Testing              |
-| Human following           | ⚠️ Experimental         |
-| Physical robot validation | 🚧 Active development   |
+- dual motor PWM and direction control;
+- encoder pulse counting and wheel-speed estimation;
+- wheel PID control;
+- MPU6050 communication;
+- odometry and IMU message publication;
+- `/cmd_vel` subscription through rosserial;
+- watchdog and stop behavior.
 
----
+The documented rosserial baud rate is 115200. Follow the wiring and serial-device checks in [SETUP.md](SETUP.md) before connecting the motors or starting the J1900 bridge.
 
-# 🐛 Known Issues
+## Sensor fusion
 
-Current development focuses on improving real-world robustness.
+The shared launch file [odom_ekf.launch](src/robot_bringup/launch/odom_ekf.launch) configures the `robot_localization` EKF for encoder odometry and MPU6050 data. The SLAM, navigation, and standalone EKF launch files include this configuration where needed.
 
-Known areas for improvement include:
+```text
+/odom + /imu
+     |
+     v
+robot_localization EKF
+     |
+     v
+/odometry/filtered and odom -> base_footprint TF
+```
 
-* The global planner can occasionally generate inefficient paths.
-* TEB behavior near the goal still requires parameter tuning.
-* Some Gazebo mapping configurations may produce minor mapping artifacts.
-* Physical-world navigation requires additional testing across different environments.
-* Human-following performance still requires further real-world validation.
+Do not start multiple copies of the EKF node at the same time. Duplicate publishers can interrupt TF and destabilize localization.
 
-These issues are documented intentionally so that the project remains transparent about its current development state.
+## AI-assisted development and security
 
----
+The repository contains instruction files for local coding-agent workflows, including [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md), and [CURSOR.md](CURSOR.md). These files are development aids, not a replacement for reviewing commands before they are run.
 
-# 🛣️ Roadmap
+Any local agent, MCP integration, shell runner, ROS service caller, or hardware-control tool used with this project should be restricted to a trusted development environment. Review repository instructions, shell commands, dependencies, credentials, and ROS service calls before granting an automated tool access to the workspace or robot.
 
-* [ ] Improve real-world navigation stability
-* [ ] Further tune TEB parameters
-* [ ] Improve SLAM consistency
-* [ ] Complete multi-goal navigation validation
-* [ ] Improve human-following robustness
-* [ ] Expand automated testing
-* [ ] Improve simulation-to-real consistency
-* [ ] Harden MCP and AI-agent execution boundaries
-* [ ] Improve project documentation
-* [ ] Add more reproducible development workflows
+The physical robot can move and interact with its environment. Test changes with the wheels lifted or at low speed first, keep an operator near the power switch, and never expose robot-control interfaces directly to an untrusted network.
 
----
+## Project status
 
-# 🤝 Contributing
+| Area | Status |
+| --- | --- |
+| Differential-drive hardware | Running on the physical prototype |
+| ESP32 motor control | Implemented and tested |
+| Encoder and MPU6050 data | Implemented |
+| S9 LiDAR driver | Implemented |
+| Gazebo simulation | Available |
+| Physical SLAM | Implemented and validated in the documented setup |
+| EKF sensor fusion | Implemented and under hardware testing |
+| AMCL and `move_base` | Implemented; real-world tuning continues |
+| TEB local planning | Implemented; parameter tuning continues |
+| Multi-goal patrol | Available in code; physical route validation remains |
+| Human following | Experimental; requires further field tuning |
+| Automated tests | Present under `tests/` |
 
-Contributions, bug reports, improvements, and discussions are welcome.
+## Known limitations
 
-If you find a problem with:
+- Navigation parameters are environment- and floor-dependent.
+- The checked-in patrol goal file is intentionally conservative and must be edited for a validated map.
+- Physical SLAM and navigation depend on correct ROS networking, TF, serial-device detection, and power delivery.
+- LiDAR and camera placement affect following performance.
+- Motor, wheel, battery, and encoder changes require recalibration.
+- Simulation results do not guarantee the same behavior on the physical platform.
 
-* ROS nodes
-* Navigation
-* SLAM
-* Sensor fusion
-* ESP32 firmware
-* Simulation
-* Documentation
-* AI-assisted development tooling
+## Roadmap
 
-please open an issue with enough information to reproduce the problem.
+- [ ] Improve real-world navigation stability.
+- [ ] Tune TEB and costmap parameters for additional environments.
+- [ ] Improve SLAM consistency and scan processing.
+- [ ] Complete physical multi-goal patrol validation.
+- [ ] Improve human-following robustness and recovery behavior.
+- [ ] Expand automated tests and reproducible launch checks.
+- [ ] Improve simulation-to-real consistency.
+- [ ] Document hardware assembly and calibration with more photographs.
+- [ ] Harden local agent and ROS tool execution boundaries.
 
-For robotics-related issues, including the following information when possible:
+## Contributing
+
+Issues, fixes, hardware notes, and documentation improvements are welcome. For a useful bug report, include:
 
 ```text
 ROS version:
 Ubuntu version:
 Hardware:
-Relevant launch file:
+Relevant launch file or script:
 Relevant configuration:
 Error message:
 ROS logs:
 Steps to reproduce:
 ```
 
----
+For changes that can move the robot, include the test environment and the safety procedure used.
 
-# ⚠️ Development Notes
+## Documentation
 
-This project is primarily intended for **education, research, experimentation, and robotics development**.
+- [SETUP.md](SETUP.md): installation, networking, wiring, first power-on, simulation, and physical operation.
+- Hardware and mechanical notes are documented in the repository-root hardware notes file.
+- [Robot bringup launch files](src/robot_bringup/launch/): real-robot SLAM, navigation, EKF, and following.
+- [Simulation launch files](src/robot_sim/launch/): Gazebo, simulated SLAM, and navigation.
+- [Tests](tests/): unit tests for LiDAR and following-related Python nodes.
 
-The physical robot can interact with its environment. Always test new control, navigation, and AI-assisted changes in a controlled environment before deploying them to hardware.
+## License
 
-Never expose ROS services, MCP tools, shell execution interfaces, or robot-control interfaces directly to untrusted networks.
+The ROS package manifests currently declare MIT. This checkout does not contain a top-level `LICENSE` file, so add one before distributing the repository under a formal license.
 
----
+## About
 
-# 📚 Documentation
+This project is an ongoing exploration of self-built mobile robotics with ROS, embedded control, SLAM, navigation, perception, and careful simulation-to-real validation.
 
-More detailed documentation will be added progressively for:
-
-* Hardware assembly
-* ESP32 firmware
-* ROS bringup
-* Gazebo simulation
-* SLAM
-* Navigation
-* Sensor fusion
-* Human following
-* AI-assisted development
-* ROS MCP tools
-
----
-
-# 📄 License
-
-See the repository license file for the current licensing terms.
-
----
-
-## ⭐ About
-
-This project is an ongoing exploration of **ROS-based mobile robotics, embedded control, SLAM, autonomous navigation, and AI-assisted robotics development**.
-
-The long-term goal is to build a reproducible and extensible robotics platform that connects:
-
-```text
-Embedded Control
-       +
-ROS
-       +
-Simulation
-       +
-SLAM / Navigation
-       +
-AI-Assisted Development
-```
-
-If you find the project useful, consider giving it a ⭐ on GitHub.
-
-**Repository:**
-[https://github.com/lawliet206/ROS](https://github.com/lawliet206/ROS)
+Repository: https://github.com/lawliet206/ROS
