@@ -5,7 +5,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src", "robot_bringup", "scripts"))
 
 from s9_lidar_driver import (_extract_frames, _dist_raw_to_m,
-                             _radar_angle_to_bin, NUM_BINS)
+                             _radar_angle_to_bin, NUM_BINS, S9LidarDriver)
 
 
 # ============ 帧构造辅助 ============
@@ -179,3 +179,124 @@ def test_angle_bin_wraparound():
     # 原始 359.9° → 镜像 0.1° → +(-90) = -89.9 → round(-90) → %360 = 270
     assert _radar_angle_to_bin(359.9, -90.0) == 270
     assert 0 <= _radar_angle_to_bin(359.9, -90.0) < NUM_BINS
+
+
+# ============ parse_frame: 360° 缓冲区填充 ============
+def make_angle_frame(first_deg, last_deg, cnt, nodes=None):
+    """构造角度可定制的帧: AA55 ct cnt firstAngle lastAngle cs + cnt×3B 节点.
+    nodes: [(quality, dist_raw), ...]; 默认 dist=4000(1.0m), quality=0.
+    """
+    head = (b'\xAA\x55' + bytes([0x3e, cnt]) +
+            struct.pack('<H', int(first_deg * 64) << 1) +
+            struct.pack('<H', int(last_deg * 64) << 1) +
+            b'\x12\x34')
+    if nodes is None:
+        nodes = [(0, 4000)] * cnt
+    payload = b''.join(bytes([q]) + struct.pack('<H', d) for q, d in nodes)
+    return head + payload
+
+
+def _make_driver():
+    """绕过 __init__ (不打开串口/不创建 Publisher), 模拟 parse_frame 所需状态."""
+    drv = object.__new__(S9LidarDriver)
+    drv.ranges = [float('inf')] * NUM_BINS
+    drv.intensities = [0.0] * NUM_BINS
+    drv.fill_count = 0
+    drv.frame_count = 0
+    drv.scan_count = 0
+    drv.cross_count = 0
+    drv.last_first = -1
+    drv.last_publish = 0.0
+    drv.min_range = 0.03
+    drv.max_range = 8.0
+    drv.angle_offset = -90.0
+    drv.published = 0
+
+    def _publish():
+        # 与真实 publish_scan 一致的填充阈值与缓冲区重置
+        if drv.fill_count < 30:
+            return
+        drv.published += 1
+        drv.scan_count += 1
+        drv.ranges = [float('inf')] * NUM_BINS
+        drv.intensities = [0.0] * NUM_BINS
+        drv.fill_count = 0
+
+    drv.publish_scan = _publish
+    return drv
+
+
+def test_parse_frame_single_point_binning():
+    # 90° 单点 → 镜像 270° + offset(-90) = bin 180 (声明 0°)
+    drv = _make_driver()
+    drv.parse_frame(make_angle_frame(90, 90, 1, [(7, 4000)]))
+    assert drv.ranges[180] == 1.0
+    assert drv.intensities[180] == 7
+    assert drv.fill_count == 1
+
+
+def test_parse_frame_multipoint_fill():
+    # 0°→90° 共 10 点 → 依次落到 bin 270..180, 全部填充
+    drv = _make_driver()
+    drv.parse_frame(make_angle_frame(0, 90, 10))
+    assert drv.fill_count == 10
+    assert drv.ranges[270] == 1.0      # 0°
+    assert drv.ranges[180] == 1.0      # 90°
+    assert drv.ranges[260] == 1.0      # 10°
+
+
+def test_parse_frame_min_wins_same_bin():
+    # 同 bin 两点 → 距离取最小, 强度取最大
+    drv = _make_driver()
+    drv.parse_frame(make_angle_frame(90, 90, 2, [(10, 5000), (200, 4000)]))
+    assert drv.ranges[180] == 1.0      # min(1.25, 1.0)
+    assert drv.intensities[180] == 200
+    assert drv.fill_count == 1         # 同一 bin 只计一次填充
+
+
+def test_parse_frame_invalid_dist_skipped():
+    # dist_raw=0 / >=0xFFF0 → 无效点, 不填充
+    drv = _make_driver()
+    drv.parse_frame(make_angle_frame(90, 90, 2, [(0, 0), (0, 0xFFF0)]))
+    assert drv.fill_count == 0
+
+
+def test_parse_frame_range_filtered():
+    # 0.02m < min_range(0.03) / 10m > max_range(8.0) → 丢弃
+    drv = _make_driver()
+    drv.parse_frame(make_angle_frame(90, 90, 2, [(0, 80), (0, 40000)]))
+    assert drv.fill_count == 0
+
+
+def test_parse_frame_rejects_bad_length():
+    drv = _make_driver()
+    drv.parse_frame(b'\xAA\x55')                      # < 12B
+    drv.parse_frame(b'\xAA\x55\x3e\x00' + b'\x00' * 20)   # cnt=0
+    drv.parse_frame(b'\xAA\x55\x3e\x50' + b'\x00' * 20)   # cnt=80 → 帧长不足
+    assert drv.frame_count == 0
+
+
+# ============ parse_frame: 跨零触发发布 ============
+def test_parse_frame_cross_triggers_publish():
+    # 帧1 覆盖 280°→80° (41 点, fill≥30), 帧2 first=10° <100° → 跨零 → 发布并清空
+    drv = _make_driver()
+    drv.parse_frame(make_angle_frame(280, 80, 41))
+    assert drv.fill_count == 41
+    assert drv.published == 0                          # 未跨零不发布
+
+    drv.parse_frame(make_angle_frame(10, 10, 1))
+    assert drv.cross_count == 1
+    assert drv.published == 1                          # 触发一次发布
+    assert drv.fill_count == 1                         # 跨零后本帧数据继续填充 (下一圈起点)
+    assert drv.ranges[260] == 1.0                      # 10° → bin 260 (镜像350-90)
+    assert drv.ranges[0] == float('inf')               # 旧缓冲区已清空
+
+
+def test_parse_frame_no_cross_within_zone():
+    # first 从 280° 到 200° (>100°) → 不跨零, 不发布
+    drv = _make_driver()
+    drv.parse_frame(make_angle_frame(280, 80, 41))
+    drv.parse_frame(make_angle_frame(200, 200, 1))
+    assert drv.cross_count == 0
+    assert drv.published == 0
+    assert drv.fill_count == 42

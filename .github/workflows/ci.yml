@@ -6,8 +6,92 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  test:
+  # ============================================================
+  # 静态检查: 无需 ROS 环境, 快速失败 (Python/Shell/XML/YAML)
+  # ============================================================
+  static-checks:
+    name: 静态检查 (compileall / shell / XML / YAML)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Python 语法编译检查
+        run: python3 -m compileall -q src tools tests
+
+      - name: Shell 脚本语法检查 (bash -n)
+        run: |
+          set -e
+          count=0
+          for f in $(find src tools -name '*.sh' -type f); do
+            bash -n "$f"
+            count=$((count + 1))
+            echo "OK: $f"
+          done
+          echo "Shell OK: $count files"
+
+      - name: XML 校验 (launch / URDF / world / package.xml)
+        run: |
+          python3 - <<'EOF'
+          import glob
+          import xml.etree.ElementTree as ET
+
+          files = sorted(
+              glob.glob('src/**/*.launch', recursive=True)
+              + glob.glob('src/**/*.urdf', recursive=True)
+              + glob.glob('src/**/*.xml', recursive=True)
+              + glob.glob('src/**/worlds/*.world', recursive=True))
+          assert files, '未找到任何 XML 文件'
+          ok = True
+          for f in files:
+              try:
+                  ET.parse(f)
+              except Exception as e:
+                  ok = False
+                  print(f'FAIL: {f}: {e}')
+          assert ok, 'XML 校验失败'
+          print(f'XML OK: {len(files)} files')
+
+          # package.xml 关键元数据不变量
+          import re
+          for f in glob.glob('src/*/package.xml'):
+              text = open(f, encoding='utf-8').read()
+              assert '@example.com' not in text, f'{f} 仍含占位邮箱'
+              m = re.search(r'<version>([^<]+)</version>', text)
+              assert m, f'{f} 缺少 version'
+              print(f'package.xml OK: {f} (version {m.group(1)})')
+          EOF
+
+      - name: YAML 校验 (config)
+        run: |
+          pip3 install -q pyyaml
+          python3 - <<'EOF'
+          import glob
+          import yaml
+
+          files = sorted(glob.glob('src/**/*.yaml', recursive=True))
+          assert files, '未找到任何 YAML 文件'
+          ok = True
+          for f in files:
+              try:
+                  with open(f, encoding='utf-8') as fh:
+                      yaml.safe_load(fh)
+              except Exception as e:
+                  ok = False
+                  print(f'FAIL: {f}: {e}')
+          assert ok, 'YAML 校验失败'
+          print(f'YAML OK: {len(files)} files')
+          EOF
+
+  # ============================================================
+  # ROS 容器内完整验证: catkin_make + pytest (真实依赖环境)
+  # ============================================================
+  ros-test:
     name: catkin_make + pytest (ROS Noetic)
     runs-on: ubuntu-22.04
     container:
@@ -24,6 +108,7 @@ jobs:
             ros-noetic-gmapping \
             ros-noetic-amcl \
             ros-noetic-move-base \
+            ros-noetic-navfn \
             ros-noetic-map-server \
             ros-noetic-robot-localization \
             ros-noetic-topic-tools \

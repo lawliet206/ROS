@@ -638,3 +638,7 @@ bash ~/ROS/src/robot_bringup/scripts/j1900_start.sh stop
 | Gazebo 打不开 | `export SVGA_VGPU10=0` |
 | 一键启动后超时 | 查看 `~/.robot_logs/`；J1900 硬件日志位于 `/tmp/esp32.log`、`/tmp/lidar.log`、`/tmp/cam.log` |
 | 导航、跟踪、键盘能同时跑吗 | 不能；它们都会发布 `/cmd_vel`。`robot_start.sh` 切换模式前会先发零速度并停止旧模式 |
+| 导航偶发选路不优（[issue #1](https://github.com/lawliet206/ROS/issues/1)） | 属调参问题而非功能故障。先确认地图/代价地图正确：`rviz` 中查看 `/map` 与 footprint；再试调 `navigation.launch` 中 global/local costmap 的 `inflation_radius`（当前 0.20）与 `robot_radius`；TEB 的 `min_obstacle_dist` 若过大也会绕远。改前记录原参数，一次只改一个 |
+| TEB 速度收敛慢/抖动（[issue #2](https://github.com/lawliet206/ROS/issues/2)） | 与动力学限制相关：检查 `navigation.launch` 中 TEB 的 `max_vel_x`/`acc_lim_x`/`acc_lim_theta` 是否匹配底盘实际能力；`dt_ref` 越大计算越快但精度降低；可尝试 `penalty_epsilon` 与 `oscillation_reduction` 缓解摆动。务必架空轮子验证后再落地 |
+| Gazebo 出现"幽灵障碍"（[issue #3](https://github.com/lawliet206/ROS/issues/3)） | 已排除雷达自碰（sim URDF 中 laser_link 自带 0.04m 碰撞圆柱，但 `range_min=0.50` 已过滤）。优先检查：`/tf` 是否跳变（`rviz` 里看 odom→laser_link）、`odom_ekf` 是否正常、AMCL 初始位姿是否与地图一致；其次尝试移除 laser_link 的 `<collision>` 复测 |
+| 实物轮子验证待补（[issue #4](https://github.com/lawliet206/ROS/issues/4)） | 固件/参数已就绪，缺真车复测数据。复测前先跑 `esp32_board_test` 逐项验证编码器/电机/IMU 方向极性，再低速（≤0.3 m/s）落地 |

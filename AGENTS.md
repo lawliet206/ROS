@@ -74,7 +74,7 @@ python3 -m pytest tests -q
 ## 修改规范
 
 - **可随意改**：README.md、docs/、tools/、tests/、config 参数调优、launch 参数。
-- **谨慎改（先理解再动）**：`s9_lidar_driver.py`（协议解析被 15 个测试锁定）、`vision_follower.py` / `person_detector.py`（状态机被 12 个测试锁定）、`robot_start.sh` / `j1900_start.sh`（一键流程被 README/SETUP 引用）。
+- **谨慎改（先理解再动）**：`s9_lidar_driver.py`（协议解析/缓冲被 23 个测试锁定）、`vision_follower.py` / `person_detector.py`（状态机/选人被 21 个测试锁定）、`scan_deskew.py` / `send_goals.py`（去畸变/目标解析被 17 个测试锁定）、`robot_start.sh` / `j1900_start.sh`（一键流程被 README/SETUP 引用）。
 - **不要随意改**：`esp32_firmware/libraries/ros_lib/`（vendored 官方库+本地修复）、URDF 中的轮距/关节坐标系（与固件、launch 的 180mm 轮距强耦合）。
 - 改 ROS Python 节点：必须先更新或新增对应 tests 并跑通；改 ESP32 固件：必须用 `esp32_board_test` 验证硬件行为。
 - 删除文件前先 `git log -- <path>` 确认用途；`.gitignore` 已忽略 build/ devel/ logs/ docx 等生成物。

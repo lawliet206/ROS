@@ -106,6 +106,21 @@ STBY→GPIO4(拉高)  VCC→3.3V  VM→电池12V
 MPU6050: SDA→GPIO21  SCL→GPIO22
 ```
 
+### 原理图与 PCB（自绘硬件，2026-07 定型）
+
+<p align="center">
+  <img src="docs/hardware/schematic.png" alt="ESP32 主控板原理图" width="45%"/>
+  <img src="docs/hardware/pcb_front.png" alt="PCB 正面" width="45%"/>
+  <br/>
+  <em>左: ESP32 主控板原理图　右: PCB 正面（电机驱动 / 编码器 / IMU / rosserial 全集成）</em>
+</p>
+
+<p align="center">
+  <img src="docs/hardware/pcb_back.png" alt="PCB 反面" width="60%"/>
+  <br/>
+  <em>PCB 反面（电源 / 雷达 / 摄像头接口）</em>
+</p>
+
 ---
 
 ## 🧩 软件栈
@@ -114,7 +129,7 @@ MPU6050: SDA→GPIO21  SCL→GPIO22
 |----|------|------|
 | 仿真 | Gazebo / RViz | 15m×15m 房间 + 差速插件 + 同款导航参数 |
 | 建图 | gmapping | 订阅 `/scan_deskewed`（支持 IMU 去畸变） |
-| 定位 | AMCL | 500~3000 粒子，diff-corrected 里程计模型 |
+| 定位 | AMCL | 100~500 粒子（实物）/ 500~3000（仿真），diff-corrected 里程计模型 |
 | 规划 | move_base + **TEB** | navfn 全局 + TEB 局部，max_vel_x=0.6 |
 | 融合 | robot_localization EKF | odom+imu → `/odometry/filtered`（30Hz） |
 | 通信 | rosserial (115200) | PC↔J1900 WiFi，J1900↔ESP32 USB |
@@ -170,11 +185,13 @@ bash src/robot_bringup/scripts/robot_start.sh follow
 bash src/robot_bringup/scripts/robot_start.sh stop   # 立即发送零速度
 ```
 
-### 5. 单元测试（无需硬件）
+### 5. 单元测试
 
 ```bash
 python3 -m pytest tests -q
-# 36 例回归测试: 雷达协议解析(15) + 角度换算/选人(9) + 跟随状态机(12)
+# 61 例回归测试: 雷达协议解析+缓冲/跨零(23) + 跟随状态机(12) + 检测帧处理(9)
+#               + 激光去畸变/IMU窗均值(11) + 巡航目标解析(6)
+# CI 会在 ros:noetic 容器中自动执行全部测试
 ```
 
 ---
@@ -210,7 +227,7 @@ ROS/                          # catkin 工作空间根
 │   ├── esp32_firmware.ino    # ★ 主固件（PCNT + PID + IMU + rosserial）
 │   ├── esp32_board_test/     # 板级测试固件（单项验证）
 │   └── libraries/ros_lib/    # vendored rosserial 库（已修复 ESP32 兼容）
-├── tests/                    # pytest 回归测试（36 例，无硬件依赖）
+├── tests/                    # pytest 回归测试（61 例，无硬件依赖）
 ├── tools/                    # 调试工具（不入部署链）
 └── docs/                     # 架构图 / 开发指南 / 毕业设计论文
 ```
@@ -222,9 +239,27 @@ ROS/                          # catkin 工作空间根
 | 文档 | 内容 |
 |------|------|
 | [SETUP.md](SETUP.md) | 完整部署：环境安装、网络、接线、首次上电、仿真与实物操作、FAQ |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统架构：三机数据流、TF 树、节点/launch 清单、安全机制 |
+| [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | 组件状态矩阵、测试覆盖、已知限制、路线图 |
+| [CHANGELOG.md](CHANGELOG.md) | 变更记录（全部来自真实 git 历史） |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南：环境、测试、硬件安全红线、PR 流程 |
+| [SECURITY.md](SECURITY.md) | 安全策略与漏洞报告方式 |
+| [AGENTS.md](AGENTS.md) | Coding Agent 项目指南（AI 工具链维护参考） |
 | [docs/developer-guide.md](docs/developer-guide.md) | 开发者工具链参考（MCP / Skills / Git 速查） |
 | [docs/system_architecture.png](docs/system_architecture.png) | 系统架构图（`tools/generate_architecture.py` 可重新生成） |
 | [docs/thesis/](docs/thesis/) | 毕业设计论文《基于ROS的两轮差速移动机器人的设计与实现》 |
+
+---
+
+## 🧑‍💻 参与贡献
+
+本项目是真实运行的机器人平台，**欢迎 Issue 与 PR**（请先读 [CONTRIBUTING.md](CONTRIBUTING.md)）：
+
+- 🐛 报告 Bug / 提出功能建议 → [新建 Issue](https://github.com/lawliet206/ROS/issues/new/choose)
+- 🔧 提交代码 → fork 后 PR，CI 会自动运行静态检查 + 容器内 catkin_make + pytest
+- 📣 已知问题与路线图 → [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md)
+
+**社区准则**：本项目承诺不伪造验证结果——所有"实机验证"标记均有真实提交与论文实验图佐证；任何安全漏洞请按 [SECURITY.md](SECURITY.md) 私下报告。
 
 ---
 

@@ -22,6 +22,53 @@ from collections import deque
 from sensor_msgs.msg import LaserScan, Imu
 
 
+def _deskew_ranges(ranges, intensities, angle_min, angle_max, angle_increment,
+                   range_min, range_max, total_yaw):
+    """逐点激光去畸变核心算法（纯函数，不依赖 ROS，供单元测试）。
+
+    点 i 的采集时间偏移 frac ∈ [0,1]，补偿角 = total_yaw * frac，
+    修正后角度规整到 [-π, π] 并映射回 bin（处理 +π 边界环绕）。
+    距离与强度同步重排。返回 (new_ranges, new_intensities)。
+    """
+    N = len(ranges)
+    if N == 0:
+        return [], []
+
+    new_ranges = [float('inf')] * N
+    new_intensities = [0.0] * N
+
+    for i in range(N):
+        r = ranges[i]
+        if not math.isfinite(r) or r < range_min or r > range_max:
+            continue
+
+        # 点 i 的采集时间偏移 (0 = 扫描开始, 1 = 扫描结束)
+        frac = i / max(N - 1, 1)
+        # 该点的旋转补偿角 → 加到原始角度上
+        yaw_corr = total_yaw * frac
+        angle = angle_min + i * angle_increment
+        corrected_angle = angle + yaw_corr
+
+        # 规整到 [-π, π]
+        corrected_angle = math.atan2(math.sin(corrected_angle),
+                                     math.cos(corrected_angle))
+
+        # 映射到 bin, 处理 +π 边界 (atan2 可能返回 π)
+        bi = int(round((corrected_angle - angle_min) /
+                       angle_increment))
+        if bi < 0:
+            bi += N
+        elif bi >= N:
+            bi -= N
+        if r < new_ranges[bi]:
+            new_ranges[bi] = r
+            # 强度与距离同步重排, 保持索引对应
+            if intensities and i < len(intensities):
+                new_intensities[bi] = intensities[i]
+
+    return new_ranges, new_intensities
+
+
 class ScanDeskew:
     def __init__(self):
         # IMU 环形缓冲区 (~10s)
@@ -93,37 +140,10 @@ class ScanDeskew:
         corrected.range_max = scan.range_max
 
         # 逐点校正: 点 i 的时间偏移 → 该点的旋转角 → 修正角度
-        new_ranges = [float('inf')] * N
-        new_intensities = [0.0] * N
-
-        for i in range(N):
-            r = scan.ranges[i]
-            if not math.isfinite(r) or r < scan.range_min or r > scan.range_max:
-                continue
-
-            # 点 i 的采集时间偏移 (0 = 扫描开始, 1 = 扫描结束)
-            frac = i / max(N - 1, 1)
-            # 该点的旋转补偿角 → 加到原始角度上
-            yaw_corr = total_yaw * frac
-            angle = scan.angle_min + i * scan.angle_increment
-            corrected_angle = angle + yaw_corr
-
-            # 规整到 [-π, π]
-            corrected_angle = math.atan2(math.sin(corrected_angle),
-                                         math.cos(corrected_angle))
-
-            # 映射到 bin, 处理 +π 边界 (atan2 可能返回 π)
-            bi = int(round((corrected_angle - scan.angle_min) /
-                           scan.angle_increment))
-            if bi < 0:
-                bi += N
-            elif bi >= N:
-                bi -= N
-            if r < new_ranges[bi]:
-                new_ranges[bi] = r
-                # 强度与距离同步重排, 保持索引对应
-                if scan.intensities and i < len(scan.intensities):
-                    new_intensities[bi] = scan.intensities[i]
+        new_ranges, new_intensities = _deskew_ranges(
+            scan.ranges, scan.intensities,
+            scan.angle_min, scan.angle_max, scan.angle_increment,
+            scan.range_min, scan.range_max, total_yaw)
 
         corrected.ranges = new_ranges
         corrected.intensities = new_intensities if scan.intensities else []

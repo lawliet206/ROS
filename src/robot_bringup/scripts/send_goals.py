@@ -43,6 +43,27 @@ from geometry_msgs.msg import PoseStamped
 from tf.transformations import quaternion_from_euler
 
 
+def _goals_to_tuples(raw):
+    """把原始目标列表转换为 (x, y, yaw) 元组列表（纯函数，供测试）。
+
+    规则:
+      - 条目 [x, y]          → (x, y, 0.0)
+      - 条目 [x, y, yaw]     → (x, y, yaw)
+      - 非列表/长度不足/数值无法转换的条目 → 跳过（不中断整个列表）
+    """
+    goals = []
+    for g in raw:
+        try:
+            if len(g) >= 2:
+                x, y = float(g[0]), float(g[1])
+                yaw = float(g[2]) if len(g) >= 3 else 0.0
+                goals.append((x, y, yaw))
+        except (TypeError, ValueError):
+            # 畸形条目: 跳过而不是让节点崩溃
+            continue
+    return goals
+
+
 class GoalSender:
     """多点导航目标发送器"""
 
@@ -107,13 +128,7 @@ class GoalSender:
                 return []
 
         # 转换为 (x, y, yaw) 元组
-        goals = []
-        for g in raw:
-            if len(g) >= 2:
-                x, y = float(g[0]), float(g[1])
-                yaw = float(g[2]) if len(g) >= 3 else 0.0
-                goals.append((x, y, yaw))
-        return goals
+        return _goals_to_tuples(raw)
 
     # ================================================================
     # 创建 MoveBaseGoal
