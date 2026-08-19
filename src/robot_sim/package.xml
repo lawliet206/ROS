@@ -22,6 +22,8 @@
   <exec_depend>tf</exec_depend>
   <exec_depend>tf2_ros</exec_depend>
   <exec_depend>teleop_twist_keyboard</exec_depend>
+  <exec_depend>navfn</exec_depend>
+  <exec_depend>rviz</exec_depend>
 
   <export>
   </export>
