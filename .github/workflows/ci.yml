@@ -19,7 +19,7 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Python 语法编译检查
         run: python3 -m compileall -q src tools tests
@@ -96,15 +96,23 @@ jobs:
     runs-on: ubuntu-22.04
     container:
       image: ros:noetic-robot
+    # 容器内默认 shell 是 sh(dash), 不支持 bash 的 source 内建命令,
+    # 必须显式使用 bash, 否则 `source /opt/ros/noetic/setup.bash` 报
+    # "source: not found" (exit 127)。
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: 安装 ROS 依赖包
         run: |
           apt-get update
           apt-get install -y --no-install-recommends \
             python3-pytest \
+            python3-numpy \
+            python3-yaml \
             ros-noetic-gmapping \
             ros-noetic-amcl \
             ros-noetic-move-base \
