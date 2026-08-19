@@ -15,6 +15,10 @@
 - fix: send_goals 畸形条目容错（原实现遇非数值条目会使节点崩溃）
 - docs: 新增 OSS 基础设施 — CONTRIBUTING / SECURITY / Issue & PR 模板
 - docs: 新增 ARCHITECTURE / PROJECT_STATUS / CHANGELOG，README 测试数与 AMCL 参数修正
+- merge: 整合远端并行改动 — 英文 README + demo 素材（assets/ 实物照片/视频/建图截图）、
+  docs/MAINTAINER_WORKFLOW.md（AI 工具链维护规范）、tests/conftest.py（无 ROS 运行测试的
+  rospy/消息替身，补齐 actionlib/move_base_msgs/tf）、requirements-dev.txt、
+  .github/workflows/python-tests.yml（快速纯 Python CI，与 ros:noetic 深度 CI 互补）
 
 ### 2026-08-19 · 开源规范化
 

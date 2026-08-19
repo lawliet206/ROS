@@ -1,6 +1,9 @@
-# 贡献指南
+# 贡献指南 · Contributing
 
 感谢你对本项目的兴趣！在提交 Issue / PR 之前，请先阅读本文档与本仓库根目录的 [AGENTS.md](AGENTS.md)。
+
+For English contributors: a short English summary is at the bottom of this file.
+维护者使用 AI 工具链（Codex 等）的规范见 [docs/MAINTAINER_WORKFLOW.md](docs/MAINTAINER_WORKFLOW.md)。
 
 ## 项目定位
 
@@ -28,10 +31,12 @@ source devel/setup.bash
 
 ```bash
 # 单元测试（纯逻辑回归，无需硬件；CI 用 ros:noetic 容器自动执行）
+python3 -m pip install -r requirements-dev.txt
 python3 -m pytest tests -q
 ```
 
 - 测试直接 import `src/*/scripts` 下的节点（通过 `sys.path.insert`），**不要删除 tests/ 里的该行**。
+- `tests/conftest.py` 提供无 ROS 环境下的 rospy/消息类型替身，使纯逻辑测试可在任意机器运行。
 - 修改 ROS Python 节点 → **必须**同步新增/更新对应测试并跑通。
 - 修改 ESP32 固件 → 必须用 `esp32_board_test` 在硬件上验证。
 - 涉及底盘控制（PID、PWM 映射、方向、死区）→ 先架空轮子验证，再低速（≤0.3 m/s）落地测试。
@@ -77,3 +82,28 @@ python3 -m pytest tests -q
 
 - 修改 launch 参数 / 脚本行为后，同步更新 README.md、SETUP.md、AGENTS.md 中对应的描述。
 - 新增可复现的坑与解法，优先写入 SETUP.md 的 FAQ 而非仅留在 Issue 评论里。
+
+---
+
+## English summary
+
+This project targets ROS Noetic on Ubuntu 20.04 and includes code that can command a physical mobile robot. Read [SETUP.md](SETUP.md) before running hardware-related scripts.
+
+Suggested workflow:
+
+1. Open an issue or describe the proposed change before starting work that affects hardware behavior, launch defaults, or navigation parameters.
+2. Keep each pull request focused on one behavior or documentation topic.
+3. Add or update a test when changing pure Python logic.
+4. Run the checks below and include their results in the pull request.
+5. Do not commit ROS logs, model weights, credentials, maps containing sensitive locations, or machine-specific network addresses.
+
+Validation:
+
+```bash
+python3 -m pip install -r requirements-dev.txt
+python3 -m pytest tests -q
+```
+
+For ROS changes, also build the workspace with `catkin_make` after sourcing `/opt/ros/noetic/setup.bash`.
+
+Hardware safety: never weaken the stop workflow (`robot_start.sh stop` publishes zero velocity); lift the robot or stay below 0.3 m/s for first motor tests; keep ROS Master bound to the local network only.

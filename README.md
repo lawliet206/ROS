@@ -188,10 +188,11 @@ bash src/robot_bringup/scripts/robot_start.sh stop   # 立即发送零速度
 ### 5. 单元测试
 
 ```bash
+python3 -m pip install -r requirements-dev.txt   # numpy + pytest
 python3 -m pytest tests -q
 # 61 例回归测试: 雷达协议解析+缓冲/跨零(23) + 跟随状态机(12) + 检测帧处理(9)
 #               + 激光去畸变/IMU窗均值(11) + 巡航目标解析(6)
-# CI 会在 ros:noetic 容器中自动执行全部测试
+# 无需 ROS 环境: tests/conftest.py 提供 rospy/消息替身; CI 还会在 ros:noetic 容器中执行全部测试
 ```
 
 ---
@@ -199,10 +200,28 @@ python3 -m pytest tests -q
 ## 📸 实测效果
 
 <p align="center">
+  <img src="assets/robot.jpg" alt="实物机器人" width="60%"/>
+  <br/>
+  <em>自制两轮差速底盘（ESP32 主控 + J1900 车载 + S9 雷达 + 摄像头）</em>
+</p>
+
+<p align="center">
+  <a href="assets/demo.mp4"><img src="assets/robot.jpg" alt="实物运行演示视频" width="60%"/></a>
+  <br/>
+  <em>▶ <a href="assets/demo.mp4">实物运行演示视频（MP4）</a></em>
+</p>
+
+<p align="center">
+  <img src="assets/mapping.jpg" alt="RViz 雷达建图" width="45%"/>
   <img src="docs/thesis/figures/fig6-1_slam_map.png" alt="SLAM 建图" width="45%"/>
+  <br/>
+  <em>左: RViz 实机雷达点云建图　右: gmapping 实机建图</em>
+</p>
+
+<p align="center">
   <img src="docs/thesis/figures/fig6-3_nav_path.png" alt="导航路径" width="45%"/>
   <br/>
-  <em>左: gmapping 实机建图　右: 多点导航路径规划</em>
+  <em>多点导航路径规划</em>
 </p>
 
 ---
@@ -228,6 +247,7 @@ ROS/                          # catkin 工作空间根
 │   ├── esp32_board_test/     # 板级测试固件（单项验证）
 │   └── libraries/ros_lib/    # vendored rosserial 库（已修复 ESP32 兼容）
 ├── tests/                    # pytest 回归测试（61 例，无硬件依赖）
+├── assets/                   # 实物照片 / 演示视频 / 建图截图
 ├── tools/                    # 调试工具（不入部署链）
 └── docs/                     # 架构图 / 开发指南 / 毕业设计论文
 ```
@@ -242,8 +262,9 @@ ROS/                          # catkin 工作空间根
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 系统架构：三机数据流、TF 树、节点/launch 清单、安全机制 |
 | [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | 组件状态矩阵、测试覆盖、已知限制、路线图 |
 | [CHANGELOG.md](CHANGELOG.md) | 变更记录（全部来自真实 git 历史） |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南：环境、测试、硬件安全红线、PR 流程 |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | 贡献指南：环境、测试、硬件安全红线、PR 流程（含英文摘要） |
 | [SECURITY.md](SECURITY.md) | 安全策略与漏洞报告方式 |
+| [docs/MAINTAINER_WORKFLOW.md](docs/MAINTAINER_WORKFLOW.md) | 维护者工作流：AI 工具链（Codex 等）使用规范与人工审查要求 |
 | [AGENTS.md](AGENTS.md) | Coding Agent 项目指南（AI 工具链维护参考） |
 | [docs/developer-guide.md](docs/developer-guide.md) | 开发者工具链参考（MCP / Skills / Git 速查） |
 | [docs/system_architecture.png](docs/system_architecture.png) | 系统架构图（`tools/generate_architecture.py` 可重新生成） |
