@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: catkin_make + pytest (ROS Noetic)
+    runs-on: ubuntu-22.04
+    container:
+      image: ros:noetic-robot
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: 安装 ROS 依赖包
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            python3-pytest \
+            ros-noetic-gmapping \
+            ros-noetic-amcl \
+            ros-noetic-move-base \
+            ros-noetic-map-server \
+            ros-noetic-robot-localization \
+            ros-noetic-topic-tools \
+            ros-noetic-teleop-twist-keyboard \
+            ros-noetic-robot-state-publisher \
+            ros-noetic-joint-state-publisher \
+            ros-noetic-tf \
+            ros-noetic-tf2-ros \
+            ros-noetic-tf2-geometry-msgs \
+            ros-noetic-actionlib \
+            ros-noetic-move-base-msgs \
+            ros-noetic-rosserial-python \
+            ros-noetic-rosserial-arduino \
+            ros-noetic-gazebo-ros \
+            ros-noetic-gazebo-plugins \
+            ros-noetic-usb-cam \
+            ros-noetic-image-transport \
+            ros-noetic-compressed-image-transport \
+            ros-noetic-teb-local-planner
+
+      - name: catkin_make 编译
+        run: |
+          source /opt/ros/noetic/setup.bash
+          cd "${GITHUB_WORKSPACE}"
+          catkin_make
+
+      - name: 单元测试 (pytest)
+        run: |
+          source /opt/ros/noetic/setup.bash
+          source "${GITHUB_WORKSPACE}/devel/setup.bash"
+          cd "${GITHUB_WORKSPACE}"
+          python3 -m pytest tests -q

@@ -1,33 +1,51 @@
-# catkin 编译产物
+# ============ catkin 编译产物 ============
 build/
 devel/
 install/
+.catkin_workspace
+
+# ============ Python ============
 *.pyc
 __pycache__/
+*.egg-info/
+.pytest_cache/
 
-# IDE/编辑器
+# ============ IDE / 编辑器 ============
 .vscode/
 .idea/
 
-# Claude/OpenCode 工具状态
+# ============ AI 工具状态 (不入库) ============
 .claude/
 .claud/
 .omo/
 .waylog/
+.codegraph/
 
-# 第三方 vendored 目录（YDLIDAR 自带 git，不嵌套）
+# ============ 第三方 vendored 目录 ============
+# YDLIDAR SDK 自带 git 仓库，不嵌套提交
 YDLIDAR/
 YDLIDAR/ydlidar_ws/log
 
-# 系统文件
+# ============ 系统文件 ============
 .DS_Store
 *.swp
 *.swo
 *~
 
+# ============ 运行时产物 ============
 # YOLO 模型权重 (person_detector 首次运行自动下载)
 yolov8n.pt
 .roscore.log
-
-# 运行时日志 (robot_start.sh / j1900_start.sh 输出)
+# robot_start.sh / j1900_start.sh 输出日志
 .robot_logs/
+
+# ============ 二进制文档 (论文/报告等, 不入库, 保留本地) ============
+*.docx
+*.doc
+*.ppt
+*.pptx
+*.pdf
+
+# ============ ESP32 构建产物 (Arduino CLI / PlatformIO) ============
+esp32_firmware/build/
+esp32_firmware/.pio/
