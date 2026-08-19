@@ -395,7 +395,8 @@ USB CP2102 → ESP32。
 > **⚠️ 每个新终端必须先执行：`source ~/ROS/devel/setup.bash`**
 > 否则 `rosrun`/`roslaunch` 会报 `package not found`。
 >
-> 卡住了？`bash ~/ROS/tools/kill_ros.sh` 一键清理所有 ROS/Gazebo 进程。
+> 卡住了？重新运行 `sim_*.sh` 会自动清理旧 Gazebo/ROS 进程；或手动
+> `killall -9 gzserver gzclient roslaunch rosmaster rviz`（仿真模式专用，勿在实物模式使用）。
 
 ### 6.1 SLAM 建图
 
@@ -572,7 +573,7 @@ rostopic echo /odometry/filtered -n1
 
 ## 8. 快速参考
 
-实物模式不要使用会连 roscore 一起杀掉的 `tools/kill_ros.sh`；统一使用
+实物模式不要使用会连 roscore 一起杀掉的暴力 `killall` 方式；统一使用
 `robot_start.sh stop`，它会先发送零速度，再停止 PC 与 J1900 功能节点。
 
 ### 仿真
