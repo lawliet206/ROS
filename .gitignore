@@ -49,3 +49,10 @@ yolov8n.pt
 # ============ ESP32 构建产物 (Arduino CLI / PlatformIO) ============
 esp32_firmware/build/
 esp32_firmware/.pio/
+
+# ============ 本地缓存 ============
+.ruff_cache/
+
+# ============ 论文正文 (仅保留本地, 不入库; figures 实验图正常入库) ============
+docs/thesis/*.md
+docs/thesis/*.docx
