@@ -4,6 +4,10 @@
 
 # ROS 两轮差速自主移动机器人 🤖
 
+<p align="right">
+  <a href="README.en.md">English</a> | 简体中文
+</p>
+
 > **ROS Noetic + ESP32 + J1900 + LiDAR 的两轮差速自主移动机器人平台**
 > 从电机 PID 到 SLAM/导航/人体跟随的完整开源实现，三机分布式架构，可复现可扩展。
 
@@ -249,7 +253,7 @@ ROS/                          # catkin 工作空间根
 ├── tests/                    # pytest 回归测试（61 例，无硬件依赖）
 ├── assets/                   # 实物照片 / 演示视频 / 建图截图
 ├── tools/                    # 调试工具（不入部署链）
-└── docs/                     # 架构图 / 开发指南 / 毕业设计论文
+└── docs/                     # 架构图 / 开发指南 / 项目文档
 ```
 
 ---
@@ -268,7 +272,6 @@ ROS/                          # catkin 工作空间根
 | [AGENTS.md](AGENTS.md) | Coding Agent 项目指南（AI 工具链维护参考） |
 | [docs/developer-guide.md](docs/developer-guide.md) | 开发者工具链参考（MCP / Skills / Git 速查） |
 | [docs/system_architecture.png](docs/system_architecture.png) | 系统架构图（`tools/generate_architecture.py` 可重新生成） |
-| [docs/thesis/](docs/thesis/) | 毕业设计论文《基于ROS的两轮差速移动机器人的设计与实现》 |
 
 ---
 
