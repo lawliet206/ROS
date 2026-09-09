@@ -23,7 +23,7 @@
   <!-- ===== 参数 ===== -->
   <arg name="map_file"     default="" />
   <arg name="lidar_model"  default="s9_fsrd" />
-  <arg name="lidar_port"   default="/dev/ttyUSB0" />
+  <arg name="lidar_port"   default="/dev/serial/by-id/usb-1a86_USB_Serial-if00-port0" />
   <arg name="start_lidar"  default="true" />  <!-- 实物部署时设 false -->
 
   <!-- ============================================================ -->
@@ -110,7 +110,7 @@
     <param name="update_min_a"        value="0.2" />
 
     <!-- 发布速率 -->
-    <param name="transform_tolerance" value="0.3" />
+    <param name="transform_tolerance" value="1.0" />
   </node>
 
   <!-- ============================================================ -->
@@ -153,6 +153,7 @@
     <param name="global_costmap/robot_base_frame"    value="base_footprint" />
     <param name="global_costmap/update_frequency"    value="1.0" />
     <param name="global_costmap/publish_frequency"   value="0.5" />
+    <param name="global_costmap/transform_tolerance" value="2.0" />
     <param name="global_costmap/static_map"          value="true" />
     <param name="global_costmap/rolling_window"      value="false" />
     <param name="global_costmap/resolution"          value="0.05" />
@@ -171,6 +172,7 @@
     <param name="local_costmap/robot_base_frame"     value="base_footprint" />
     <param name="local_costmap/update_frequency"     value="5.0" />
     <param name="local_costmap/publish_frequency"    value="1.0" />
+    <param name="local_costmap/transform_tolerance"  value="2.0" />
     <param name="local_costmap/static_map"           value="false" />
     <param name="local_costmap/rolling_window"       value="true" />
     <param name="local_costmap/width"                value="4.0" />
@@ -209,9 +211,9 @@
     <param name="local_costmap/inflation/cost_scaling_factor"  value="5.0" />
 
     <!-- TEB 参数 (来自仿真验证过的配置) -->
-    <param name="TebLocalPlannerROS/max_vel_x"            value="0.6" />
+    <param name="TebLocalPlannerROS/max_vel_x"            value="1.2" />
     <param name="TebLocalPlannerROS/max_vel_theta"        value="1.0" />
-    <param name="TebLocalPlannerROS/acc_lim_x"            value="0.4" />
+    <param name="TebLocalPlannerROS/acc_lim_x"            value="0.8" />
     <param name="TebLocalPlannerROS/acc_lim_theta"        value="0.5" />
     <param name="TebLocalPlannerROS/min_turning_radius"   value="0.2" />
     <param name="TebLocalPlannerROS/exact_arc_length"     value="true" />

@@ -12,7 +12,7 @@
   <arg name="lidar_port"  default="/dev/ttyUSB0" />
   <arg name="start_lidar" default="true" />
   <arg name="follow_dist" default="1.0" />
-  <arg name="max_speed"   default="0.5" />
+  <arg name="max_speed"   default="0.7" />
 
   <!-- 基础启动 (URDF + 激光雷达) -->
   <include file="$(find robot_bringup)/launch/bringup.launch">
