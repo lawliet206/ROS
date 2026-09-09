@@ -49,10 +49,10 @@
 // PID 输出 = Kp*error + Ki*∫error*dt + Kd*d(measurement)/dt
 // 微分项算在测量值上 (不是误差), 避免设定值突变时产生过冲
 // 调参顺序: 先只调 Kp 让车轮跟得上设定转速, 再加 Ki 消除稳态误差, 最后加少量 Kd 抑制震荡
-#define MAX_RAMP_RPM_PER_SEC  100.0f          // [可调] RPM 斜坡限制 (RPM/s). 降低到 100 使起步更平缓安全
+#define MAX_RAMP_RPM_PER_SEC  180.0f          // [可调] RPM 斜坡限制 (RPM/s). 180 RPM/s 兼顾 1.2m/s 起步响应与平顺性
 #define RPM_FILTER_ALPHA      0.3f            // [可调] 转速低通滤波 α (0~1). 越小越平滑但响应越慢. 0.3 是默认. 高速场景需要更快响应时可加大到 0.5, 但 RPM 读数会更抖
 #define PID_INTEGRAL_LIMIT    2000.0f         // [可调] PID 积分上限. 限制积分项不会无限累积 (抗积分饱和). 过大 → 积分失控, 过小 → 稳态误差清不掉
-#define MAX_CMD_RPM           200.0f          // [可调] 最大允许 RPM. 200 RPM ≈ 0.89 m/s, 安全测试速度
+#define MAX_CMD_RPM           380.0f          // [可调] 最大允许 RPM. 保持在 400 RPM 以下
 #define MIN_START_PWM         450.0f          // [实车校准] 启动死区补偿 PWM (0~1023). 实际输出=PID输出+此值; 落地起步扭矩不足, 提升到 450
 #define PID_OUTPUT_LIMIT      1023.0f         // [可调] PID 输出上限. 10bit PWM 最大 1023. 小于此值可限制最大功率, 保护电机或省电
 
@@ -60,8 +60,8 @@
 #define LOOP_INTERVAL_US  10000                 // [可调] 主循环间隔 (μs). 10000=10ms=100Hz. 改小提高控制频率但增加 CPU 负载. 改大降低频率但编码器采样更稀疏, 高速下 RPM 估算不准
 #define WATCHDOG_TIMEOUT  800                   // [可调] 看门狗超时 (ms). 超过此时间没收到 /cmd_vel 则自动停车拉低 STBY. 设太小正常行驶中突然无指令会急停, 太大失控后要很久才自动停
 #define ROSSERIAL_BAUD     115200                // [实车校准] 230400/460800 会损坏大帧; 固件与上位机必须保持一致
-#define ODOM_PUBLISH_INTERVAL_MS  125            // 8Hz，降低 rosserial 大帧吞吐以避免偶发校验错误
-#define IMU_PUBLISH_INTERVAL_MS   250            // 4Hz，与 odom 错峰发送
+#define ODOM_PUBLISH_INTERVAL_MS  200            // 5Hz，给 115200 rosserial 留出余量，避免消息排队导致 TF 过期
+#define IMU_PUBLISH_INTERVAL_MS   500            // 2Hz，与 odom 错峰发送，导航主要使用编码器速度
 
 // ========== 堵转检测 ==========
 // 判定条件: 命令转速 ≥ STALL_DETECT_CMD_THRESH 但实际转速 < 1 RPM, 持续超过 STALL_DETECT_TIME_MS
@@ -170,25 +170,19 @@ void setup_pcnt(pcnt_unit_t unit, int pulse_pin, int ctrl_pin) {
 }
 
 long read_pcnt_left() {
-  static int16_t last_val = 0;
   int16_t count = 0;
   if (pcnt_get_counter_value(PCNT_UNIT_0, &count) != ESP_OK) return 0;
-  int32_t diff = (int32_t)count - (int32_t)last_val;
-  if (diff > 32767) diff -= 65536;
-  else if (diff < -32768) diff += 65536;
-  last_val = count;
-  return diff;
+  // 每次读取后清零，避免 PCNT 在连续行驶约 1~2 分钟后饱和，
+  // 饱和会让实际 RPM 突然变成 0，PID 随后打满 PWM 并误触发堵转保护。
+  pcnt_counter_clear(PCNT_UNIT_0);
+  return (long)count;
 }
 
 long read_pcnt_right() {
-  static int16_t last_val = 0;
   int16_t count = 0;
   if (pcnt_get_counter_value(PCNT_UNIT_1, &count) != ESP_OK) return 0;
-  int32_t diff = (int32_t)count - (int32_t)last_val;
-  if (diff > 32767) diff -= 65536;
-  else if (diff < -32768) diff += 65536;
-  last_val = count;
-  return diff;
+  pcnt_counter_clear(PCNT_UNIT_1);
+  return (long)count;
 }
 
 void setup_motors() {
@@ -657,8 +651,8 @@ void loop() {
     imu_msg.orientation_covariance[8] = 100.0;          // [重要] yaw 方差=100, 表示偏航角完全不可信. 因为 cf_yaw 是纯陀螺仪积分没有磁力计修正, EKF 不应使用此值做偏航参考
   }
 
-  // 115200 的有效上限约 11.5KB/s。odom(约 718B) 8Hz + imu(约 320B) 4Hz
-  // 合计约 7.3KB/s；保留约 37% 余量，并错峰发送大帧。
+  // 115200 的有效上限约 11.5KB/s。降低到 odom 5Hz + IMU 2Hz，
+  // 为 rosserial 握手、/cmd_vel 和诊断消息留出余量，避免输出队列积压造成 TF 延迟。
   unsigned long publish_now_ms = millis();
   if (publish_now_ms - last_odom_publish_ms >= ODOM_PUBLISH_INTERVAL_MS) {
     last_odom_publish_ms += ODOM_PUBLISH_INTERVAL_MS;
