@@ -62,12 +62,23 @@ detect_ports() {
   ESP32_PORT=""
   LIDAR_PORT=""
   local dev driver
+
+  # 使用稳定的 udev 名称，避免 USB 重连后 ttyUSB0/ttyUSB2 编号变化。
+  # CP210x 是 ESP32，CH341 是 S9 雷达；没有 by-id 时再回退到当前 tty 名称。
+  for dev in /dev/serial/by-id/*; do
+    [ -e "${dev}" ] || continue
+    case "${dev}" in
+      *Silicon_Labs*CP210*|*CP210*) ESP32_PORT="${dev}" ;;
+      *1a86_USB_Serial*)           LIDAR_PORT="${dev}" ;;
+    esac
+  done
+
   for dev in /dev/ttyUSB*; do
     [ -e "${dev}" ] || continue
     driver=$(readlink -f "/sys/class/tty/$(basename "${dev}")/device/driver" 2>/dev/null || true)
     case "${driver}" in
-      *cp210x*)     ESP32_PORT="${dev}" ;;
-      *ch341-uart*) LIDAR_PORT="${dev}" ;;
+      *cp210x*)     [ -n "${ESP32_PORT}" ] || ESP32_PORT="${dev}" ;;
+      *ch341-uart*) [ -n "${LIDAR_PORT}" ] || LIDAR_PORT="${dev}" ;;
     esac
   done
 

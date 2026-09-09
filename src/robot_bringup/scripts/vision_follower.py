@@ -160,7 +160,7 @@ class FollowStateMachine:
 class VisionFollower:
     def __init__(self):
         self.target_dist   = rospy.get_param("~target_dist",   1.0)
-        self.max_linear    = rospy.get_param("~max_linear",    0.5)
+        self.max_linear    = rospy.get_param("~max_linear",    0.7)
         self.max_angular   = rospy.get_param("~max_angular",   0.8)
         self.min_dist      = rospy.get_param("~min_dist",      0.30)
         self.max_dist      = rospy.get_param("~max_dist",      5.0)

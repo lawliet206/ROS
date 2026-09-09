@@ -177,6 +177,41 @@ start_detached() {
   setsid "$@" >"${log_file}" 2>&1 < /dev/null &
 }
 
+start_keyboard_terminal() {
+  local keyboard_cmd terminal
+  keyboard_cmd="source /opt/ros/noetic/setup.bash; source '${ROS_WS}/devel/setup.bash'; export ROS_MASTER_URI='${ROS_MASTER_URI}'; export ROS_IP='${ROS_IP}'; exec rosrun teleop_twist_keyboard teleop_twist_keyboard.py _speed:=0.30 _turn:=0.80 _repeat_rate:=20.0 _key_timeout:=1.0"
+
+  if [ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]; then
+    return 1
+  fi
+
+  # 不假定 PC 一定安装 GNOME Terminal；常见桌面终端均可承载键盘遥控节点。
+  for terminal in gnome-terminal xfce4-terminal mate-terminal konsole xterm x-terminal-emulator; do
+    command -v "${terminal}" >/dev/null 2>&1 || continue
+    case "${terminal}" in
+      gnome-terminal|mate-terminal)
+        setsid "${terminal}" --title="SLAM keyboard control" -- bash -lc "${keyboard_cmd}" \
+          >/dev/null 2>&1 < /dev/null &
+        ;;
+      xfce4-terminal)
+        setsid "${terminal}" --title="SLAM keyboard control" --command="bash -lc \"${keyboard_cmd}\"" \
+          >/dev/null 2>&1 < /dev/null &
+        ;;
+      konsole)
+        setsid "${terminal}" --title "SLAM keyboard control" -e bash -lc "${keyboard_cmd}" \
+          >/dev/null 2>&1 < /dev/null &
+        ;;
+      *)
+        setsid "${terminal}" -T "SLAM keyboard control" -e bash -lc "${keyboard_cmd}" \
+          >/dev/null 2>&1 < /dev/null &
+        ;;
+    esac
+    sleep 0.2
+    return 0
+  done
+  return 1
+}
+
 validate_goal_file() {
   local goal_file="$1"
   python3 - "${goal_file}" <<'PY'
@@ -227,12 +262,10 @@ run_slam() {
     echo "[WARN] 当前没有图形桌面，无法自动打开 RViz"
   fi
 
-  if command -v gnome-terminal >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
-    gnome-terminal --title="SLAM keyboard control" -- bash -lc \
-      "source /opt/ros/noetic/setup.bash; source '${ROS_WS}/devel/setup.bash'; export ROS_MASTER_URI='${ROS_MASTER_URI}'; export ROS_IP='${ROS_IP}'; rosrun teleop_twist_keyboard teleop_twist_keyboard.py _speed:=0.30 _turn:=0.80 _repeat_rate:=20.0 _key_timeout:=1.0"
+  if start_keyboard_terminal; then
     echo "[OK] SLAM 键盘窗口已启动"
   else
-    echo "[WARN] 当前没有图形终端，SLAM 已启动；请另开终端运行键盘控制"
+    echo "[WARN] 未找到可用图形终端，SLAM 已启动；请另开终端运行键盘控制"
     echo "       rosrun teleop_twist_keyboard teleop_twist_keyboard.py"
   fi
   echo "保存地图: bash ${ROS_WS}/src/robot_bringup/scripts/save_map.sh <地图名>"
@@ -262,7 +295,7 @@ run_patrol() {
   fi
 
   start_detached "${patrol_log}" rosrun robot_bringup send_goals.py \
-    _goal_file:="${goal_file}" _loop:=true
+    _goal_file:="${goal_file}" _loop:=true _max_retries:=1 _stop_on_failure:=true
   sleep 2
   if ! rosnode list 2>/dev/null | grep -qx /send_goals; then
     echo "[ERROR] 巡航节点启动失败，日志: ${patrol_log}"

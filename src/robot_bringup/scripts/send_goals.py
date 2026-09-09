@@ -51,6 +51,7 @@ class GoalSender:
         self.timeout     = rospy.get_param("~timeout", 60.0)        # 每个目标超时 (秒)
         self.max_retries = rospy.get_param("~max_retries", 2)    # 失败重试次数 (0=不重试)
         self.loop        = rospy.get_param("~loop",    False)       # 是否循环
+        self.stop_on_failure = rospy.get_param("~stop_on_failure", True)
         self.frame_id    = rospy.get_param("~frame",   "map")       # 坐标系
 
         # 解析目标列表
@@ -187,6 +188,10 @@ class GoalSender:
 
             if not success:
                 rospy.logerr("[Nav] 目标%d 经%d次尝试后仍失败, 跳过", idx + 1, self.max_retries + 1)
+                if self.stop_on_failure:
+                    rospy.logerr("[Nav] 为避免恢复行为反复原地旋转，停止巡航；请检查 TF/定位/障碍物后重新启动")
+                    self.client.cancel_goal()
+                    return
 
             # 下一个目标
             idx += 1

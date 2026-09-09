@@ -139,16 +139,30 @@ class S9LidarDriver:
 
         self.scan_pub = rospy.Publisher("/scan", LaserScan, queue_size=3)
 
-        # 打开串口 (权限由 udev 规则管理, SETUP.md 4.6)
-        try:
-            self.ser = serial.Serial(port, 115200, timeout=0.02)
-            rospy.loginfo("[S9] %s @ 115200 | cross=%ddeg", port, CROSS_HI)
-        except serial.SerialException as e:
-            rospy.logerr("[S9] 无法打开 %s: %s", port, e)
-            raise
+        # 优先使用 /dev/serial/by-id 或 by-path。USB 重连后 ttyUSB 编号会变化，
+        # 使用动态 ttyUSB0 会让驱动永远握着已经失效的旧文件描述符。
+        self.port = port
+        self.ser = None
+        rospy.loginfo("[S9] %s @ 115200 | cross=%ddeg", self.port, CROSS_HI)
 
-        time.sleep(0.3)
-        self.ser.reset_input_buffer()
+    def _close_serial(self):
+        if self.ser is not None:
+            try:
+                self.ser.close()
+            except Exception:
+                pass
+            self.ser = None
+
+    def _open_serial(self):
+        try:
+            self.ser = serial.Serial(self.port, 115200, timeout=0.02)
+            self.ser.reset_input_buffer()
+            rospy.loginfo("[S9] serial connected: %s", self.port)
+            return True
+        except (serial.SerialException, OSError) as exc:
+            self._close_serial()
+            rospy.logwarn_throttle(5, "[S9] waiting for %s: %s", self.port, exc)
+            return False
 
     def publish_scan(self):
         """发布一圈完整的 360° 扫描"""
@@ -260,6 +274,9 @@ class S9LidarDriver:
 
         while self.running and not rospy.is_shutdown():
             try:
+                if self.ser is None and not self._open_serial():
+                    time.sleep(1.0)
+                    continue
                 raw = self.ser.read(256)
                 if not raw:
                     continue
@@ -284,11 +301,18 @@ class S9LidarDriver:
                     self.frame_count = 0
                     self.last_log = now
 
+            except (serial.SerialException, OSError) as e:
+                # USB 拔出/接触不良时 pyserial 可能反复抛出“readiness ... no data”。
+                # 关闭旧 fd，等待 udev 重新创建设备后自动重连。
+                rospy.logwarn_throttle(5, "[S9] serial disconnected: %s", e)
+                self._close_serial()
+                buf.clear()
+                time.sleep(1.0)
             except Exception as e:
-                rospy.logwarn_throttle(5, "[S9] %s", e)
+                rospy.logwarn_throttle(5, "[S9] parser error: %s", e)
                 time.sleep(0.1)
 
-        self.ser.close()
+        self._close_serial()
 
     def stop(self):
         self.running = False
