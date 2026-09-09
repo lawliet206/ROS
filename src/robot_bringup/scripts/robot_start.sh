@@ -6,6 +6,8 @@ MODE="${1:-help}"
 
 ROS_WS="${ROS_WS:-$HOME/ROS}"
 PC_IP="${PC_IP:-$(hostname -I | awk '{print $1}')}"
+# 默认值为主机本人的 SSH 目标; 其他部署请用环境变量覆盖:
+#   J1900_HOST=<用户名>@<主机名或IP> bash robot_start.sh ...
 J1900_HOST="${J1900_HOST:-lawliet@lawliet.local}"
 REMOTE_ROS_WS="${REMOTE_ROS_WS:-/home/lawliet/ROS}"
 REMOTE_SCRIPT="${REMOTE_ROS_WS}/src/robot_bringup/scripts/j1900_start.sh"

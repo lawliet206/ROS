@@ -3,6 +3,9 @@
 
 MODE="${1:-base}"
 ROS_WS="${ROS_WS:-$HOME/ROS}"
+# PC ROS Master 地址; robot_start.sh 会通过环境变量自动传入,
+# 仅手动在 J1900 上直接运行时使用此默认值 (示例 IP, 请按你的网络修改):
+#   PC_MASTER=<PC的IP> bash j1900_start.sh base
 PC_MASTER="${PC_MASTER:-10.80.147.11}"
 START_TIMEOUT="${START_TIMEOUT:-20}"
 
