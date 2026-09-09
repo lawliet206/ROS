@@ -538,7 +538,7 @@ bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow rotate_180:=false
 **执行位置：PC**
 
 ```bash
-bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow follow_dist:=1.2 hfov:=70
+bash ~/ROS/src/robot_bringup/scripts/robot_start.sh follow follow_dist:=1.2 hfov:=70//这个最好
 ```
 
 调试检测结果：
