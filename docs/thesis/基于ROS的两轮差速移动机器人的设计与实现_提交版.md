@@ -13,19 +13,19 @@
 
 ## 摘　要
 
-移动机器人要在室内完成自主导航、跟随人这类任务，离不开 ROS 这类能把算法和硬件串起来的软件框架。ROS 提供标准化的通信机制和大量现成算法包，这两年我在这套框架上搭了一台两轮差速小车，把从电机驱动到上层导航的整条链路都走了一遍[1-3]。
+移动机器人在室内完成自主导航、人体跟随，需要把感知、决策、运动控制串成一条完整链路。ROS 提供了标准化的通信机制和大量现成算法包，本文在一台两轮差速小车上，把这条链路从电机驱动到上层导航完整走通[1-3]。
 
-论文围绕这台小车的实现展开，主要做了四件事：
+论文的工作围绕四块展开：
 
-（1）整机采用"PC—车载工控机—下位机"三机架构。PC 端作为 ROS Master，跑 SLAM、路径规划和视觉检测这些算力要求高的节点；J1900 工控机放在车上，负责激光雷达驱动和图像采集压缩；ESP32 下位机通过 rosserial 协议完成电机 PID 控制、编码器里程计和 IMU 姿态解算。三层分工下来，每台设备只干自己擅长的事。
+（1）整机采用"PC—车载工控机—下位机"三机架构：PC 端作为 ROS Master 运行 SLAM、路径规划和视觉检测；车载 J1900 工控机负责激光雷达驱动与图像采集压缩；ESP32 下位机通过 rosserial 协议完成电机 PID 控制、编码器里程计和 IMU 姿态解算，算力按设备能力分摊。
 
-（2）S9 激光雷达的协议没有公开，原始数据质量也差。我对着串口抓包把它的定长帧格式逆向了出来，实现了 360° 扫描合成，距离和角度都做了实测标定，解析逻辑配了 15 项回归测试防退化。编码器里程计和 IMU 则用扩展卡尔曼滤波（EKF）做了融合，单一传感器的误差被压下去一些。
+（2）S9 激光雷达协议未公开、原始数据质量也差。本文从串口抓包逆向出它的定长帧格式，实现 360° 扫描合成，距离和角度做了实测标定，解析逻辑配了覆盖边界情况的回归测试。编码器里程计与 IMU 用扩展卡尔曼滤波（EKF）融合，减小了单一传感器各自累积的误差。
 
-（3）建图用 gmapping，定位用 AMCL，路径规划用 move_base 加 TEB 局部规划器，在 15 m 的室内场景里实现了多点自主导航。启动流程被我封装成一键脚本，不用每次开一堆终端[4-10]。
+（3）建图采用 gmapping，定位采用 AMCL，路径规划基于 move_base 与 TEB 局部规划器，在 15 m 的室内场景中实现多点自主导航，启动流程封装为一键脚本[4-10]。
 
-（4）人体跟随用了"视觉定方向、激光定距离"的融合思路。视觉通道用 YOLOv8n 检测人体并算偏角[11-13]，激光通道对扫描聚类取目标距离，两者通过"跟随—搜索—停止"三态状态机融合成速度指令。单激光雷达角度分辨率不够，单目视觉又没有深度，两个通道正好互补[14-16]。
+（4）人体跟随采用"视觉定方向、激光定距离"的融合思路：视觉通道用 YOLOv8n 检测人体并计算偏角[11-13]，激光通道对扫描聚类得到目标距离，二者经"跟随—搜索—停止"三态状态机融合成速度指令。之所以做融合，是因为单激光雷达角度分辨率不足、单目视觉又缺少深度信息，单一传感器都撑不起稳定跟随[14-16]。
 
-实测时，建图和多点导航都能一键跑起来；人在前面以 1.2 m/s 的速度散步，小车能稳定保持距离；人走出视野后，小车会先 ±60° 摇摆搜索，找到人后自动恢复跟随。全部代码已开源（51 次提交、6800 余行），配了部署文档和三级测试，照着文档可以复现整套系统。
+实测中，建图与多点导航均可一键启动；人以 1.2 m/s 的速度行走时小车能稳定保持跟随距离，目标走出视野后小车先左右搜索，找到后自动恢复跟随。整套代码开源，配部署文档与三级测试，可照文档复现。
 
 **关键词：** ROS；两轮差速；激光 SLAM；自主导航；人体跟随；多传感器融合；YOLOv8
 
@@ -33,19 +33,19 @@
 
 ## Abstract
 
-Mobile robots that can navigate autonomously and follow humans indoors depend heavily on software frameworks like ROS, which provide standardized communication and a rich set of ready-made algorithm packages. Over the past two years I built a two-wheel differential-drive robot on this framework and walked through the whole pipeline, from motor drivers up to high-level navigation [1-3].
+Indoor navigation and human-following tasks both rely on one thing: a working pipeline that connects perception, decision-making, and motion control. ROS happens to provide the standardized communication layer and a large set of ready-made algorithm packages, which is why this thesis implements the full stack, from motor drivers up to high-level navigation, on a two-wheel differential-drive robot [1-3].
 
-The thesis describes this robot's implementation in four parts:
+Four pieces of work are reported:
 
-(1) A three-machine distributed architecture of "PC–onboard industrial computer–microcontroller". The PC acts as the ROS Master and runs compute-heavy nodes such as SLAM, path planning, and visual detection. The onboard J1900 industrial computer handles the LiDAR driver and compressed image acquisition. The ESP32 microcontroller implements motor PID control, encoder odometry, and IMU attitude estimation via the rosserial protocol, so each device does what it is good at.
+(1) A three-machine distributed architecture of "PC–onboard industrial computer–microcontroller". The PC runs the ROS Master together with SLAM, path planning, and visual detection. The onboard J1900 industrial computer drives the LiDAR and captures compressed images, while the ESP32 microcontroller closes the motor PID loop, reads encoder odometry, and estimates IMU attitude over the rosserial protocol. Each machine takes the load it can handle.
 
-(2) The S9 low-cost LiDAR has no publicly documented protocol and produces noisy data. I reverse-engineered its fixed-length frame format from serial packet captures, implemented 360° scan synthesis, and calibrated both distance and angle on real measurements, with 15 regression tests to keep the parser correct. Encoder odometry and IMU data are fused with an Extended Kalman Filter (EKF), which reduces the error of either sensor alone.
+(2) The S9 low-cost LiDAR has no public protocol and noisy raw output. Its fixed-length frame format was reverse-engineered from serial captures; a 360° scan synthesizer was built, and the distance and angle channels were calibrated against real measurements, with regression tests guarding the parser. Encoder odometry and IMU are fused through an Extended Kalman Filter (EKF) to reduce the drift either sensor accumulates on its own.
 
-(3) For mapping and navigation, gmapping is used for 2D LiDAR mapping, AMCL for global localization, and the move_base framework with the TEB local planner for trajectory execution, achieving multi-goal autonomous navigation in a 15 m indoor scene. The startup flow is packaged into one-command scripts so there is no need to open a pile of terminals [4-10].
+(3) gmapping is used for 2D LiDAR mapping, AMCL for localization, and move_base with the TEB local planner for navigation, giving multi-goal autonomous navigation in a 15 m indoor scene. Startup is wrapped into one-command scripts [4-10].
 
-(4) Human following uses a fused strategy of "vision determines bearing, LiDAR determines range". The vision channel detects humans with YOLOv8n and computes the bearing angle [11-13]; the range channel clusters the laser scan to get the target distance. Both channels are combined by a "follow–search–stop" three-state state machine that outputs velocity commands. The two channels compensate for each other's weakness: a single low-cost LiDAR lacks angular resolution, while monocular vision has no depth information [14-16].
+(4) Human following combines vision and LiDAR: the vision channel detects people with YOLOv8n and derives the bearing angle [11-13], while the range channel clusters the laser scan to estimate distance. A "follow–search–stop" state machine merges both channels into velocity commands. Fusion is needed because a single low-cost LiDAR has poor angular resolution and a monocular camera has no depth information; neither alone holds up in practice [14-16].
 
-In experiments, mapping and multi-goal navigation both start with a single command. The robot keeps a stable distance while following a person walking at 1.2 m/s, and after the target leaves the field of view, it sweeps ±60° to search and automatically resumes following once the person is found again. All code is open-sourced (51 commits, 6,800+ lines) with deployment documentation and a three-level test system, so the whole system can be reproduced by following the docs.
+In experiments, mapping and multi-goal navigation both start with a single command. The robot keeps a stable distance while following a person walking at 1.2 m/s; when the target leaves the field of view, the robot sweeps left and right to search and resumes following as soon as the person is found. The whole codebase is open-sourced, with deployment documentation and a three-level test system, so the system can be reproduced by following the docs.
 
 **Keywords:** ROS; two-wheel differential robot; LiDAR SLAM; autonomous navigation; human following; multi-sensor fusion; YOLOv8
 
@@ -72,17 +72,17 @@ In experiments, mapping and multi-goal navigation both start with a single comma
 
 ### 1.1　研究背景与意义
 
-移动机器人现在已经从遥控玩具发展到能自己感知环境、做决策的形态，仓储物流、家庭服务、巡检安防里都能看到它的影子。一台能用的移动机器人，核心要解决三件事：知道自己在哪里（SLAM 定位建图）、怎么走到目标点（路径规划）、以及跟着目标走（目标跟踪与跟随）。SLAM 解决"我在哪、周围是什么"，是自主导航的前提；路径规划负责在已知地图上找一条安全的路；人体跟随则要求机器人在运动中持续感知并跟踪目标，保持安全距离[17-18]。
+移动机器人的形态这几年变化很快，从简单的遥控玩具一路演进出能自主感知和决策的设备，仓储、家庭服务、安防巡检里都能见到。一台能用的移动机器人，绕不开三个基本问题：自己在哪里、周围是什么（SLAM 定位建图），怎么走到目标点（路径规划），以及跟着目标走（目标跟踪与跟随）。SLAM 解决"我在哪、周围是什么"，是自主导航的前提；路径规划负责在已知地图上找一条安全的路；人体跟随则要求机器人在运动中持续感知并跟踪目标，保持安全距离[17-18]。
 
-这三件事在学术上都有成熟的研究，但要在成本有限的实体小车上落地，工程上麻烦不少：低成本雷达的协议不公开、数据帧不完整；轮距标不准会直接污染里程计；多机通信和算力分配需要权衡；单靠激光或单靠视觉做人体跟随又各有短板。ROS 提供了标准化的通信框架和现成的算法实现，省去了从零造轮子的功夫[1-3]，但也要求搭建者对整套系统有比较全面的把握。
+这三件事学术上都有成熟研究，但落到成本有限的实体小车上，工程问题就具体了：低成本雷达协议不公开、数据帧不完整；轮距标不准直接污染里程计；多机通信和算力分配要权衡；单靠激光或单靠视觉做人体跟随又各有短板。ROS 提供标准化的通信框架和现成的算法实现，省去了从零造轮子的功夫[1-3]，但也要求搭建者对整套系统有比较全面的把握。
 
-我选择把这套系统完整地搭一遍：从选型、接线、写固件，到逆向雷达协议、调导航参数、做视觉与激光的融合跟随，最后沉淀成一套能复现、能教学的低成本移动机器人平台。
+本课题决定把整套系统完整搭一遍：从选型、接线、写固件，到逆向雷达协议、调导航参数、做视觉与激光的融合跟随，最终得到一套能复现、能教学的低成本移动机器人平台。
 
 ### 1.2　国内外研究现状
 
 #### 1.2.1　机器人操作系统
 
-ROS 由斯坦福大学人工智能实验室于 2007 年发起，Quigley 等人在 2009 年系统介绍了其话题/服务通信架构与工具链设计[2]。ROS 1 经过十余年发展，积累了 gmapping、move_base、robot_localization 等大量成熟算法包，至今仍是学术研究的主流选择。ROS 2 针对实时性、安全性和跨平台需求做了重新设计，Macenski 等人在 Science Robotics 上综述了其架构与实际应用[1]，并在 Robotics and Autonomous Systems 上调研了 ROS 2 中可用的现代移动机器人算法栈[3]。我最终选了 ROS Noetic（ROS 1 长期支持版），主要看中它的算法生态更成熟，省得自己造轮子。
+ROS 最初是斯坦福大学人工智能实验室 2007 年发起的项目，Quigley 等人在 2009 年系统介绍了其话题/服务通信架构与工具链设计[2]。ROS 1 经过十余年发展，积累了 gmapping、move_base、robot_localization 等大量成熟算法包，至今仍是学术研究的主流选择。ROS 2 针对实时性、安全性和跨平台需求重新设计，Macenski 等人在 Science Robotics 上综述了其架构与实际应用[1]，并在 Robotics and Autonomous Systems 上调研了 ROS 2 中可用的现代移动机器人算法栈[3]。本文最终选用 ROS Noetic（ROS 1 长期支持版），理由是它的算法生态更成熟，省得自己造轮子。
 
 #### 1.2.2　激光 SLAM 与定位
 
@@ -94,7 +94,7 @@ ROS 由斯坦福大学人工智能实验室于 2007 年发起，Quigley 等人�
 
 #### 1.2.4　目标检测与人体跟随
 
-目标检测方面，Redmon 等人 2016 年提出的 YOLO 把检测统一为回归问题，实现了实时检测[11]；YOLOv7 引入了可训练的"免费赠品"技巧[25]；YOLOv8 改用 anchor-free 检测头并优化特征融合，成为轻量实时检测的主流[12-13,26]。其 nano 版本参数量仅约 3.2 M，适合嵌入式 CPU。人体跟随方面，早期方案基于激光聚类[27-28]或全方位视觉[29]，各有局限。多传感器融合是这几年的主流思路：Fayyad 等人综述了深度学习传感器融合在自动驾驶中的应用[14]；Wang 等人梳理了自动驾驶的多传感器融合方法[30]；Alatise 等人在综述移动机器人融合方法的基础上，用 EKF 实现了 IMU-视觉融合位姿估计[15-16]。我的融合跟随策略就是顺着这些思路，在低成本平台上做了具体工程化。
+目标检测方面，Redmon 等人 2016 年提出的 YOLO 把检测统一为回归问题，实现了实时检测[11]；YOLOv7 引入了可训练的"免费赠品"技巧[25]；YOLOv8 改用 anchor-free 检测头并优化特征融合，成为轻量实时检测的主流[12-13,26]。其 nano 版本参数量仅约 3.2 M，适合嵌入式 CPU。人体跟随方面，早期方案基于激光聚类[27-28]或全方位视觉[29]，各有局限。多传感器融合是这几年的主流思路：Fayyad 等人综述了深度学习传感器融合在自动驾驶中的应用[14]；Wang 等人梳理了自动驾驶的多传感器融合方法[30]；Alatise 等人在综述移动机器人融合方法的基础上，用 EKF 实现了 IMU-视觉融合位姿估计[15-16]。本文的融合跟随策略即顺着这些思路，在低成本平台上做了具体工程化。
 
 ### 1.3　论文主要研究内容
 
@@ -118,9 +118,7 @@ ROS 由斯坦福大学人工智能实验室于 2007 年发起，Quigley 等人�
 
 ### 2.1　ROS 体系结构
 
-ROS 采用分布式、松耦合的通信架构，核心抽象包括节点（Node）、话题（Topic）、服务（Service）、参数服务器和 TF 坐标变换。节点是基本计算单元；话题提供异步发布/订阅通道；TF 维护各坐标系（base_link、laser、odom、map 等）间的变换关系，是感知与控制之间的枢纽。
-
-```
+ROS 采用分布式、松耦合的通信架构，核心抽象包括节点（Node）、话题（Topic）、服务（Service）、参数服务器和 TF 坐标变换。节点是基本计算单元；话题提供异步发布/订阅通道；TF 维护各坐标系（base_link、laser、odom、map 等）间的变换关系，是感知与控制之间的枢纽。```
 ┌─────────────────────────────────────────┐
 │              ROS Master（roscore）        │
 │        节点注册 / 话题发现 / 参数服务      │
@@ -136,7 +134,7 @@ ROS 采用分布式、松耦合的通信架构，核心抽象包括节点（Node
 
 **图 2-1　ROS 节点通信架构**
 
-这种架构让每个传感器、每个算法都能独立成节点，通过标准消息类型解耦，调试、替换和分布式部署都比较方便[2]。本文涉及的 LaserScan、Odometry、Twist 等消息类型均来自 ROS 标准消息库。
+这种架构下，传感器、算法各自独立成节点，通过标准消息类型解耦，调试、替换和分布式部署都方便[2]。本文涉及的 LaserScan、Odometry、Twist 等消息类型均来自 ROS 标准消息库。
 
 ### 2.2　两轮差速机器人运动学
 
@@ -186,7 +184,7 @@ $$
 \theta_{k+1} = \theta_k + \omega_k\Delta t \tag{2-6}
 $$
 
-里程计精度受轮距标定误差、打滑和噪声影响，通常需要与其他传感器融合校正（见 2.5 节）。
+里程计精度受轮距标定误差、打滑和噪声影响，本文在 2.5 节用传感器融合做了校正。
 
 ### 2.3　激光 SLAM 与 gmapping
 
@@ -216,7 +214,7 @@ $$
 p(x_t \mid z_{1:t}, u_{1:t}) \approx \sum_{i=1}^{N} w_t^{(i)} \delta(x_t - x_t^{(i)}) \tag{2-10}
 $$
 
-流程为：按运动模型预测、按观测模型更新权重、按权重重采样，粒子收敛后即可实现全局定位与位姿跟踪[8-9]。
+流程为：先按运动模型预测，再用观测模型更新权重，最后重采样；粒子收敛后即可实现全局定位与位姿跟踪[8-9]。
 
 ### 2.4　路径规划与 TEB
 
@@ -234,13 +232,11 @@ $$
 f(\mathcal{B}) = \sum_k \gamma_k f_k(\mathcal{B}) \tag{2-12}
 $$
 
-目标项 $f_k$ 包括路径长度、与参考路径的偏离、障碍物距离（惩罚函数）、速度/加速度及动力学约束。整个优化在图优化框架里求解，TEB 的实时性在实测中够用，生成的轨迹也平滑[22-24]。
+目标项 $f_k$ 包括路径长度、与参考路径的偏离、障碍物距离（惩罚函数）、速度/加速度及动力学约束。整个优化在图优化框架里求解，本文实测中 TEB 的实时性够用，生成的轨迹也平滑[22-24]。
 
 ### 2.5　多传感器融合与 EKF
 
-编码器里程计短时精度高，但轮子打滑或颠簸时误差会一直累积；IMU 角速度响应快，姿态却会随时间漂移；激光定位精度高，频率又不够。多传感器融合把这几路信息互补起来，估计会更稳[14-16,30]。
-
-对非线性系统，EKF 通过对非线性函数做一阶泰勒展开实现线性化。设状态方程和观测方程为：
+编码器里程计短时精度高，但轮子打滑或颠簸时误差会一直累积；IMU 角速度响应快，姿态却会随时间漂移；激光定位精度高，频率又不够。多传感器融合把这几路信息互补起来，估计会更稳[14-16,30]。对非线性系统，EKF 通过对非线性函数做一阶泰勒展开实现线性化。设状态方程和观测方程为：
 
 $$
 \mathbf{x}_k = f(\mathbf{x}_{k-1}, \mathbf{u}_k) + \mathbf{w}_k \tag{2-13}
@@ -276,7 +272,7 @@ $$
 
 ### 2.6　YOLO 目标检测
 
-YOLO 系列把目标检测做成单阶段回归：图像被分成 $S\times S$ 个网格，每个网格直接预测边界框和类别概率，端到端一次推理出结果[11]。从 YOLOv7 的"bag-of-freebies"训练技巧[25]到 YOLOv8 的 anchor-free 检测头、C2f 模块和任务解耦头[12-13,26]，每代都在精度和速度之间找更好的平衡点。
+YOLO 系列把目标检测做成单阶段回归：图像被分成 $S\times S$ 个网格，每个网格直接预测边界框和类别概率，一次推理端到端出结果[11]。从 YOLOv7 的"bag-of-freebies"训练技巧[25]到 YOLOv8 的 anchor-free 检测头、C2f 模块和任务解耦头[12-13,26]，每代都在精度和速度之间找平衡点。
 
 YOLOv8n 是 YOLOv8 家族中参数量最小的版本（约 3.2 M），结构包含：Backbone（CSPDarknet 变体，C2f 模块增强特征复用）、Neck（PAN-FPN 多尺度融合）、Head（解耦检测头，anchor-free 直接回归框中心与宽高）。本文在 PC 端以 CPU 推理运行 YOLOv8n（COCO 预训练权重，只启用 person 类别），640×480 分辨率下实测 10–15 FPS，满足跟随任务的实时性要求。
 
@@ -867,7 +863,7 @@ $$
 
 在 Gazebo 15 m×15 m 房间环境里跑建图、导航和跟随的仿真验证，算法链路确认没问题后再上实物。仿真阶段提前暴露了不少参数问题，实物调试周期因此短了很多。
 
-跟随仿真持续约 60 s，记录 597 组数据（时间戳、目标距离、速度指令、机器人位姿）。激光距离通道共测得 576 个有效距离样本，有效率为 96.5%，无效样本出现在目标刚被拖入视野、聚类尚未锁定的间隙。距离分布在 0.54~3.98 m，均值 1.61 m，标准差 0.71 m；其中 60.9% 的样本落在 0.8~1.8 m 区间——对应目标移动平缓、跟随稳定的时段，与图 7-2 中距离曲线平直段一致。速度指令全程没有越界：线速度 |v| 不超过 0.50 m/s、角速度 |ω| 不超过 0.60 rad/s，都在设定限幅之内；触到限幅值的样本各占 3.5%，说明绝大多数时间控制器都在正常调节区间工作，只有目标快速横移、需要急转时才短暂顶到上限，与图 7-3 的速度曲线吻合。
+跟随仿真持续约 60 s，记录 597 组数据（时间戳、目标距离、速度指令、机器人位姿）。激光距离通道共测得 576 个有效距离样本，有效率为 96.5%，丢掉的那部分都出现在目标刚被拖进视野、聚类还没来得及锁定的间隙。距离整体分布在 0.54~3.98 m，均值 1.61 m，标准差 0.71 m。其中 60.9% 的样本集中在 0.8~1.8 m 区间，对应目标移动平缓、跟随稳定的时段，与图 7-2 中距离曲线平直段一致。速度指令全程没有越界，线速度不超过 0.50 m/s、角速度不超过 0.60 rad/s，都在设定限幅之内；顶到限幅的样本各占 3.5%，说明大部分时间控制器在正常调节区间工作，只有目标快速横移、需要急转时才短暂触顶，图 7-3 的速度曲线也印证了这一走势。
 
 ### 8.4　实物联调
 
@@ -916,14 +912,14 @@ $$
 
 ### 9.2　不足与改进方向
 
-1. **导航质量**：全局规划偶发绕路、到达目标前速度不稳，后续可以换 A* 或图搜索优化；
-2. **跟随鲁棒性**：遮挡后的恢复能力还靠状态机硬兜底，引入 ByteTrack 多目标跟踪和 ReID 重识别会更好；
-3. **算力下沉**：YOLOv8n 目前跑在 PC 上，量化部署到车载 J1900 能省掉视频流传输的带宽和延迟；
-4. **传感器升级**：39 点/帧的 S9 雷达在近距离人体聚类上精度受限，换 360° 高分辨率雷达或 RGB-D 相机会明显改善。
+1. **导航质量**：全局规划偶发绕路、到达目标前速度不稳。TEB 参数调了很久才压到可接受范围，NavFn 的代价函数缺陷还在，换用 A* 或图搜索类规划器是下一步的方向；
+2. **跟随鲁棒性**：人走出视野再回来时，靠状态机硬兜底能找到，但遮挡时间长、人混在人群中时就容易跟丢。引入 ByteTrack 多目标跟踪和 ReID 重识别会改善，这部分工作量不小；
+3. **算力下沉**：YOLOv8n 目前跑在 PC 上，视频流经 WiFi 传输有 100–300 ms 延迟。量化部署到车载 J1900 能省掉传输环节，但 J1900 的 CPU 跑量化模型的实际帧率还没验证过；
+4. **传感器升级**：39 点/帧的 S9 雷达在近距离人体聚类上精度受限，换高分辨率雷达或 RGB-D 相机会明显改善，成本也会上来。
 
 ### 9.3　展望
 
-ROS 2 和边缘 AI 成熟之后，这套小车的升级空间还很大。目前的架构和代码可以作为低成本教学平台的基础，后续往上加语音交互、语义导航、人机协作这些功能，接口都是现成的。
+后续的工作主要沿两个方向走。一是把目前的代码迁移到 ROS 2，组件和接口能复用一部分，代价是启动脚本和部分驱动要重写；二是在跟随功能上继续打磨，补上 9.2 节提到的目标跟踪和重识别。这套小车硬件成本低、代码开源，作为教学平台让学生做二次开发是够用的。
 
 ---
 
@@ -997,11 +993,11 @@ ROS 2 和边缘 AI 成熟之后，这套小车的升级空间还很大。目前�
 
 ## 致　谢
 
-首先要感谢我的导师【导师姓名】老师。从选题到硬件调试，再到论文修改，【导师姓名】老师给了我很多具体的指导。特别是在雷达驱动开发和导航参数调优阶段，老师帮我理清了几个关键思路，让我少走了不少弯路。
+感谢我的导师【导师姓名】老师。选题、硬件调试、论文修改这几个阶段，老师都给了具体的意见；雷达驱动开发和导航参数调优时卡住过几次，也是老师帮忙把思路捋顺的。
 
-感谢实验室的【同学姓名】和【同学姓名】，还有一起上课的【同学姓名】等同学。做小车的时候，大家一起焊板子、调 PID、测数据，有问题随时能找人讨论，这种氛围让我能坚持把项目做完。也感谢【同学姓名】在仿真环境搭建上给我的建议。
+感谢实验室的【同学姓名】【同学姓名】等同学。小车调试那阵子，焊板子、调 PID、抓串口波形，经常是几个人一起弄到很晚，遇到问题随时能拉着人讨论。仿真环境这块，【同学姓名】也提了不少建议。
 
-最后感谢我的家人。他们一直支持我完成学业，在我熬夜调车的时候也没有抱怨，只是提醒我记得吃饭休息。
+最后感谢我的家人，做毕设这段时间，他们在生活上给了我很多照顾。
 
 ---
 
