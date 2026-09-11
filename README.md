@@ -124,7 +124,7 @@ MPU6050: SDA→GPIO21  SCL→GPIO22
 <p align="center">
   <img src="docs/hardware/pcb_back.png" alt="PCB 反面" width="60%"/>
   <br/>
-  <em>PCB 反面，电源、雷达、摄像头接口</em>
+  <em>PCB 反面</em>
 </p>
 
 ---
