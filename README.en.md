@@ -124,7 +124,7 @@ Controller board is self-designed, finalized 2026-07.
 <p align="center">
   <img src="docs/hardware/pcb_back.png" alt="PCB Back" width="60%"/>
   <br/>
-  <em>PCB back with power, LiDAR, and camera connectors.</em>
+  <em>PCB back</em>
 </p>
 
 ---
