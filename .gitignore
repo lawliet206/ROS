@@ -45,6 +45,7 @@ yolov8n.pt
 *.ppt
 *.pptx
 *.pdf
+*.mp4
 
 # ============ ESP32 构建产物 (Arduino CLI / PlatformIO) ============
 esp32_firmware/build/

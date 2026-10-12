@@ -100,10 +100,7 @@ float imu_gx = 0, imu_gy = 0, imu_gz = 0;
 float accel_scale = 1.0f;
 bool imu_healthy = true;
 
-#define COMP_GAIN      0.85f
-#define GYRO_DEADBAND  0.002f
-float cf_roll = 0, cf_pitch = 0;
-float cf_yaw = 0;
+// 注: board_test 仅做分项验证, 不做姿态解算, 互补滤波相关代码已删除
 
 float normalize_angle(float a) {
   while (a > M_PI) a -= 2 * M_PI;
@@ -302,10 +299,6 @@ void calibrate_imu() {
 
     imu_calibrated = true;
     read_imu();
-    if (imu_data_valid) {
-      cf_roll = atan2(-imu_ay, -imu_az);
-      cf_pitch = atan2(imu_ax, sqrt(imu_ay * imu_ay + imu_az * imu_az));
-    }
   } else {
     Serial.println("IMU Calibration failed! IMU disabled.");
     imu_healthy = false;
@@ -563,20 +556,6 @@ void loop() {
     set_motor_raw(0, 0);
     pid_reset(pid_left);
     pid_reset(pid_right);
-  }
-
-  if (imu_data_valid && imu_calibrated) {
-    float gx = fabs(imu_gx) > GYRO_DEADBAND ? imu_gx : 0;
-    float gy = fabs(imu_gy) > GYRO_DEADBAND ? imu_gy : 0;
-    float gz = fabs(imu_gz) > GYRO_DEADBAND ? imu_gz : 0;
-    float accel_roll = atan2(-imu_ay, -imu_az);
-    float accel_pitch = atan2(imu_ax, sqrt(imu_ay * imu_ay + imu_az * imu_az));
-    if (dt_valid) {
-      cf_roll = COMP_GAIN * (cf_roll + gx * dt) + (1.0f - COMP_GAIN) * accel_roll;
-      cf_pitch = COMP_GAIN * (cf_pitch + gy * dt) + (1.0f - COMP_GAIN) * accel_pitch;
-      cf_yaw += gz * dt;
-      cf_yaw = normalize_angle(cf_yaw);
-    }
   }
 
   if (loop_count % 100 == 0) {
